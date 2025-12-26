@@ -1,0 +1,11 @@
+[Unit]
+Description=Run download-weather-data every 15 minutes
+Requires=download-weather-data.service
+
+[Timer]
+Unit=download-weather-data.service
+OnCalendar=*:0,15,30,45
+RandomizedDelaySec=30s
+
+[Install]
+WantedBy=timers.target

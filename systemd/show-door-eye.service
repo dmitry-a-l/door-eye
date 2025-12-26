@@ -1,0 +1,14 @@
+[Unit]
+Description=Run MPV player shows door eye
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/door-eye/app.env
+EnvironmentFile=/etc/door-eye/mpv.env
+ExecStart=/usr/local/bin/show-door-eye
+RuntimeMaxSec=1d
+RestartSec=15
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

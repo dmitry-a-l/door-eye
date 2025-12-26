@@ -1,0 +1,13 @@
+[Unit]
+Description=Download weather data
+Wants=download-weather-data.timer
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/door-eye/app.env
+EnvironmentFile=/etc/door-eye/open-meteo.env
+ExecStart=/usr/local/bin/download-weather-data
+
+[Install]
+WantedBy=multi-user.target

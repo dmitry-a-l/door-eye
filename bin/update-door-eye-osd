@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+OSD_TTL_IN_MILLIS=2000
+
+WEATHER_FIELDS=(temperature_2m apparent_temperature wind_speed_10m wind_direction_10m weather_code)
+
+log() {
+  local msg="${1}"
+  echo "${msg}" >&2
+}
+
+get_time() {
+  printf "%(%b %d %H:%M)T"
+}
+
+get_wind_direction_icon() {
+    local angle="${1}"
+    # 8 base directions
+    local directions=(
+      "↓"   # north
+      "↙"   # north-east
+      "←"   # east
+      "↖"   # south-east
+      "↑"   # south
+      "↗"   # south-west
+      "→"   # west
+      "↘"   # north-west
+    )
+    # Add 22.5° to match sector center, than calculate sector number
+    local index=$(( (angle + 22) / 45 ))
+    index=$(( index % 8 ))
+    
+    echo "${directions[$index]}"
+}
+
+to_int() {
+  local var="${1}"
+  local fraction="0"
+  if [[ $var =~ \. ]]; then
+    fraction="${var##*.}"
+    fraction="${fraction:0:1}"
+  fi
+  var="${var%.*}"
+  if [[ $var -lt 0 && $fraction -gt 4 ]]; then
+    echo  $((var - 1 ))
+  elif [[ $var -lt 0 && $fraction -gt 5 ]]; then
+    echo  $((var))
+  elif [[ $fraction -gt 4 ]]; then
+    echo  $((var + 1 ))
+  else
+    echo  $((var))
+  fi
+}
+
+adapt_wind() {
+  local wind_speed="${1}" wind_angle="${2}"
+  wind_speed="$(to_int "${wind_speed}")"
+  if [[ $wind_speed -lt 3 ]]; then
+    return
+  fi
+  wind_icon="$(get_wind_direction_icon "${wind_angle}")"
+  if [[ $wind_speed -lt 10 ]]; then
+    echo "${wind_icon}"
+  elif [[ $wind_speed -lt 30 ]]; then
+    echo "${wind_icon}²"
+  elif [[ $wind_speed -lt 55 ]]; then
+    echo "${wind_icon}³"
+  elif [[ $wind_speed -lt 85 ]]; then
+    echo "${wind_icon}⁴"
+  else
+    echo "${wind_icon}⁵"
+  fi
+}
+
+#  0            Clear sky
+#  1,  2,  3    Mainly clear, partly cloudy, and overcast
+# 45, 48        Fog and depositing rime fog
+# 51, 53, 55    Drizzle: Light, moderate, and dense intensity
+# 56, 57        Freezing Drizzle: Light and dense intensity
+# 61, 63, 65    Rain: Slight, moderate and heavy intensity
+# 66, 67        Freezing Rain: Light and heavy intensity
+# 71, 73, 75    Snow fall: Slight, moderate, and heavy intensity
+# 77            Snow grains
+# 80, 81, 82    Rain showers: Slight, moderate, and violent
+# 85, 86        Snow showers slight and heavy
+# 95            Thunderstorm: Slight or moderate 
+# 96, 99        Thunderstorm with slight and heavy hail
+declare -A WEATHER_ICON_BY_CODE
+WEATHER_ICON_BY_CODE=(
+  ["0"]="☼"
+  ["1"]="☁"
+  ["2"]="☁²"
+  ["3"]="☁³"
+  ["45"]="fog"
+  ["48"]="rime fog"
+  ["51"]="𓇢"
+  ["53"]="𓇢²"
+  ["55"]="𓇢³"
+  ["56"]="❅𓇢"
+  ["57"]="❅𓇢²"
+  ["61"]="☂"
+  ["63"]="☂²"
+  ["65"]="☂³"
+  ["66"]="❅☂"
+  ["67"]="❅☂²"
+  ["71"]="❅"
+  ["73"]="❅²"
+  ["75"]="❅³"
+  ["77"]="❍"
+  ["80"]="⛆"
+  ["81"]="⛆²"
+  ["82"]="⛆³"
+  ["85"]="❅⛆"
+  ["86"]="❅⛆²"
+  ["95"]="⛈"
+  ["96"]="⛈²"
+  ["99"]="⛈³"
+)
+
+align_left() {
+  local text="${1}" size="${2}"
+  printf -v pad "%${size}s"
+  text="${text}${pad}"
+  echo "${text:0:${size}}"
+}
+
+align_right() {
+  local text="${1}" size="${2}"
+  printf -v pad "%${size}s"
+  text="${pad}${text}"
+  echo "${text: -${size}}"
+}
+
+get_weather() {
+  local field_prefix="${1}" field_suffix="${2:-}"
+  fields=""
+  for field in "${WEATHER_FIELDS[@]}"; do
+    fields="${fields},${field_prefix}${field}${field_suffix}"
+  done
+  jq -r "[${fields[0:-1]}] | join(\" \")" < "${JSON_PATH}"
+}
+
+adapt_weather() {
+  local temp="${1}" app_temp="${2}" wind_speed="${3}" wind_angle="${4}" weather_code="${5}"
+  local temp_int="" app_temp_int=""
+  temp_int="$(to_int "${temp}")"
+  temp="$(align_right "${temp_int}" 3)°C"
+  app_temp_int="$(to_int "${app_temp}")"
+  app_temp="$(align_right "${app_temp_int}" 3)°C"
+  wind_icon="$(adapt_wind "${wind_speed}" "${wind_angle}")"
+  wind_icon="$(align_left "${wind_icon}" 2)"
+  weather_icon="${WEATHER_ICON_BY_CODE["${weather_code}"]}"
+  weather_icon="$(align_left "${weather_icon}" 3)"
+
+  weather="${temp} ${wind_icon} ${weather_icon}"
+  if [[ ${temp_int} != ${app_temp_int} ]]; then
+    weather="${weather} ≋${app_temp}"
+  fi    
+  echo "${weather}"
+}
+
+get_current_weather() {
+  local fields=".current."
+  local raw_values=""
+  raw_values="$(get_weather ".current")"
+  adapt_weather ${raw_values}
+}
+
+get_forecast_weather() {
+  local interval_no="${1}" desc="${2}" raw_values=""
+  raw_values="$(get_weather ".minutely_15" "[${interval_no}]")"
+  adapt_weather "${desc}" ${raw_values}
+}
+
+update_osd() {
+  local current_time="${1}" current_weather="${2}" forecast_2h="${3}" forecast_8h="${4}"
+  osd="${current_time}\n\n${current_weather}\n\n\n\n\n\n\n\n\n\n\n\n\n\n${forecast_2h}\n${forecast_8h}\n\n\n\n" 
+  echo "set osd-msg1 '${osd}'" | socat - "${SOCK_PATH}"
+}
+
+old_time=""
+for ((;;)); do
+  if [[ -S "${SOCK_PATH}" ]]; then
+    time="$(get_time)"
+    if [[ "${time}" != "${old_time}" ]]; then
+      current_weather="$(get_current_weather)"
+      forecast_2h="$(get_forecast_weather 4 2h)"
+      forecast_8h="$(get_forecast_weather 32 8h)"
+      log "Built OSD: ${current_weather}"
+      old_time="${time}"
+    fi
+    update_osd "${time}" "${current_weather}" "${forecast_2h}" "${forecast_8h}"
+    sleep 1
+    update_osd "${time//:/ }" "${current_weather}" "${forecast_2h}" "${forecast_8h}"
+
+    sleep 1
+  else
+    log "There is no ${SOCK_PATH}"
+    sleep 1
+  fi
+done

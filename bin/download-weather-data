@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+BASE_OPEN_METEO_API_URL="https://api.open-meteo.com/v1/forecast"
+WEATHER_VARS="temperature_2m,wind_speed_10m,wind_direction_10m,apparent_temperature,weather_code"
+
+URL="${BASE_OPEN_METEO_API_URL}?latitude=${LATITUDE}&longitude=${LONGITUDE}&timezone=${TIMEZONE}"
+URL="${URL}&current=${WEATHER_VARS}&minutely_15=${WEATHER_VARS}&forecast_minutely_15=36"
+
+log() {
+  local msg="${1}"
+  echo "${msg}" >&2
+}
+
+log "Requesting weather data from OpenMeteo API"
+if DATA="$(curl -fs "${URL}")"; then
+  echo "${DATA}" > "${JSON_PATH}.tmp"
+  mv "${JSON_PATH}.tmp" "${JSON_PATH}"
+  log "Successfully downloaded weather data to ${JSON_PATH}"
+else
+  log "Failed downloading weather data: ${DATA}"
+  exit 1
+fi
