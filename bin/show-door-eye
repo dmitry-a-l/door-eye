@@ -2,7 +2,8 @@
 
 set -Eeuo pipefail
 
-/usr/bin/mpv --no-config \
+/usr/bin/mpv --quiet \
+             --no-config \
              --profile=low-latency  \
              --untimed \
              --no-cache \
