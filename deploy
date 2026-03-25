@@ -1,24 +1,36 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-HOST=orangepi
+HOST=dragon
 
+log() {
+  local line="${1}"
+  echo "${line}" >&2
+}
 
-ssh $HOST mkdir -p /etc/door-eye
+remote_run() {
+  local host="${1}" cmd="${2}"
+  cmd="set -Eeuo pipefail && ${cmd}"
+  log "Running on ${host}:"
+  log "${cmd}"
+  ssh "${host}" "${cmd}"
+}
+
+source etc/door-eye/app.env
+
+cmd="mkdir -p /etc/door-eye && mkdir -p ${LIB_DIR} && apt-get install socat mpv"
+remote_run "${HOST}" "${cmd}"
+
 rsync -ae ssh etc/door-eye/*.env $HOST:/etc/door-eye/
 rsync -ae ssh bin/* $HOST:/usr/local/bin/
 rsync -ae ssh systemd/* $HOST:/etc/systemd/system/
 
-cmd="set -Eeuo pipefail"
-cmd="${cmd} && source /etc/door-eye/app.env"
-cmd="${cmd} && mkdir -p \${LIB_DIR}"
-cmd="${cmd} && systemctl daemon-reload"
+cmd="systemctl daemon-reload"
 for unit in `ls systemd`; do
   cmd="${cmd} && systemctl enable ${unit}"
   cmd="${cmd} && systemctl restart ${unit}"
 done
 
-echo "Running \`${cmd}\` on ${HOST}"
-ssh $HOST 'bash -c "${cmd}"'
+remote_run "${HOST}" "${cmd}"
 
 echo "App successfully deployed"

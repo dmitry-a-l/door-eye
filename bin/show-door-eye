@@ -8,10 +8,10 @@ set -Eeuo pipefail
              --no-cache \
              --no-correct-pts \
              --stream-buffer-size=4KiB \
-             --video-rotate="${VIDEO_ROTATION_ANGLE}" \
              --video-zoom="${VIDEO_ZOOM_FACTOR}" \
              --osd-duration=10000 \
              --osd-align-x=center \
              --osd-margin-y=50 \
+             --osd-font-size="${OSD_FONT_SIZE}" \
              --input-ipc-server="${SOCK_PATH}" \
              ${STREAM_URL} "${@}"

@@ -7,7 +7,7 @@ EnvironmentFile=/etc/door-eye/app.env
 EnvironmentFile=/etc/door-eye/mpv.env
 ExecStart=/usr/local/bin/show-door-eye
 RuntimeMaxSec=1d
-RestartSec=15
+RestartSec=30
 Restart=always
 
 [Install]
