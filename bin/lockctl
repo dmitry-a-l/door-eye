@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+
+set -eEuo pipefail
+
+MAX_ITERATIONS=20
+ACTION_TIME=0.1
+
+OUTPUT_PINS=(
+  open_lock
+  close_lock
+  lock_led
+  extra_led
+)
+
+declare -A OUTPUTS
+OUTPUTS=(
+  [open_lock]=98
+  [close_lock]=99
+  [lock_led]=59
+  [extra_led]=57
+)
+
+INPUT_PINS=(
+  door_closed
+  lock_closed
+  lock_opened
+  extra1
+  extra2
+)
+
+declare -A INPUTS
+INPUTS=(
+  [door_closed]=58
+  [lock_closed]=56
+  [lock_opened]=28
+  [extra1]=55
+  [extra2]=51
+)
+
+DOOR_CLOSED_TIME=""
+AUTOCLOSE_PERIOD="10"
+
+CHIP=gpiochip4
+
+ACTION="${1}"
+
+set_output_high() {
+  local name="${1}"
+  gpioset -c "${CHIP}" -t0 "${OUTPUTS[$name]}=1"
+}
+
+set_output_low() {
+  local name="${1}"
+  gpioset -c "${CHIP}" -t0 "${OUTPUTS[$name]}=0"
+}
+
+get_input() {
+  local name="${1}"
+  gpioget -b pull-down --numeric -c "${CHIP}" "${INPUTS[$name]}"
+}
+
+get_output() {
+  local name="${1}"
+  cat /sys/kernel/debug/gpio | tail -n188 | head -n 96 | grep "gpio${OUTPUTS[$name]} "
+}
+
+is_door_closed() {
+  local door_closed=""
+  door_closed="$(get_input door_closed)"
+  [[ "${door_closed}" == "1" ]]
+}
+
+is_lock_closed() {
+  local lock_closed=""
+  lock_closed="$(get_input lock_closed)"
+  [[ "${lock_closed}" == "1" ]]
+}
+
+is_lock_half_closed() {
+  ! is_lock_closed && ! is_lock_opened
+}
+
+is_lock_opened() {
+  local lock_opened=""
+  lock_opened="$(get_input lock_opened)"
+  [[ "${lock_opened}" == "1" ]]
+}
+
+init() {
+  for name in "${OUTPUT_PINS[@]}"; do
+    set_output_low "${name}"
+  done
+
+  set_output_high "lock_led"
+  set_output_high "extra_led"
+}
+
+
+print_state() {
+  echo '======='
+  for name in "${INPUT_PINS[@]}"; do
+    echo "${name}: $(get_input "${name}")" 
+  done
+  echo '======='
+  for name in "${OUTPUT_PINS[@]}"; do
+    echo "${name}: $(get_output "${name}")"
+  done
+}
+
+close_lock() {
+  local i=0
+  while is_door_closed && ! is_lock_closed; do
+    set_output_high "close_lock"
+    sleep ${ACTION_TIME}
+    set_output_low "close_lock"
+    i="$((i+1))"
+    if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
+      break
+    fi
+  done
+}
+
+open_lock() {
+  local i=0
+  while is_door_closed && ! is_lock_opened; do
+    set_output_high "open_lock"
+    sleep ${ACTION_TIME}
+    set_output_low "open_lock"
+    i="$((i+1))"
+    if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
+      break
+    fi
+  done
+}
+
+set_door_closed_time() {
+  if ! is_door_closed || ! is_lock_opened; then
+    DOOR_CLOSED_TIME=""
+  else
+    if is_door_closed && is_lock_opened && [[ "${DOOR_CLOSED_TIME}" == "" ]]; then
+      DOOR_CLOSED_TIME="${EPOCHSECONDS}"
+    fi
+  fi
+}
+
+need_autoclose_lock() {
+  set_door_closed_time
+  [[ "${DOOR_CLOSED_TIME}" != "" ]] && ((EPOCHSECONDS - DOOR_CLOSED_TIME > AUTOCLOSE_PERIOD))
+}
+
+auto_close_lock() {
+  for ((;;)); do
+    if need_autoclose_lock; then
+      close_lock
+    fi
+    sleep 1 
+  done
+}
+
+case "${ACTION}" in
+  init)
+    init
+    ;;
+  print-state)
+    print_state
+    ;;
+  close_lock)
+    close_lock
+    ;;
+  open_lock)
+    open_lock
+    ;;
+  auto_close_lock)
+    init
+    auto_close_lock
+    ;;
+esac
