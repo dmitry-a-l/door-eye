@@ -15,4 +15,7 @@ set -Eeuo pipefail
              --osd-margin-y=50 \
              --osd-font-size="${OSD_FONT_SIZE}" \
              --input-ipc-server="${SOCK_PATH}" \
+             --hwdec=v4l2m2m-copy \
+             --swapchain-depth=8 \
+             --sws-fast=yes \
              ${STREAM_URL} "${@}"

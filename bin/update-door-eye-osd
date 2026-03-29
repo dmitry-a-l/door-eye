@@ -12,7 +12,7 @@ log() {
 }
 
 get_time() {
-  printf "%(%b %d %H:%M)T"
+  TZ="${TIMEZONE}" printf "%(%b %d %H:%M)T"
 }
 
 get_wind_direction_icon() {
