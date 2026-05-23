@@ -5,20 +5,18 @@ set -eEuo pipefail
 MAX_ITERATIONS=20
 ACTION_TIME=0.1
 
+declare -A OUTPUT_PINS
 OUTPUT_PINS=(
-  open_lock
-  close_lock
-  lock_led
-  extra_led
+  [open_lock]=PIN_31
+  [close_lock]=PIN_29
+  [lock_led]=PIN_35
 )
 
-declare -A OUTPUTS
-OUTPUTS=(
-  [open_lock]=98
-  [close_lock]=99
-  [lock_led]=59
-  [extra_led]=57
-)
+declare -A OUTPUT_PORTS
+for output in "${!OUTPUT_PINS[@]}"; do
+  pin="${OUTPUT_PINS[$output]}"
+  OUTPUT_PORTS[$output]="$(gpiofind $pin)"
+done
 
 INPUT_PINS=(
   door_closed
@@ -44,19 +42,24 @@ CHIP=gpiochip4
 
 ACTION="${1}"
 
+log() {
+  echo "${@}" >&2
+}
+
 set_output_high() {
   local name="${1}"
-  gpioset -c "${CHIP}" -t0 "${OUTPUTS[$name]}=1"
+  local address="${OUTPUT_PORTS[$name]}"
+  gpioset ${address}=1
 }
 
 set_output_low() {
   local name="${1}"
-  gpioset -c "${CHIP}" -t0 "${OUTPUTS[$name]}=0"
+  gpioset ${OUTPUT_PORTS[$name]}=0
 }
 
 get_input() {
   local name="${1}"
-  gpioget -b pull-down --numeric -c "${CHIP}" "${INPUTS[$name]}"
+  gpioget "${CHIP}" "${INPUTS[$name]}"
 }
 
 get_output() {
@@ -109,28 +112,47 @@ print_state() {
 
 close_lock() {
   local i=0
-  while is_door_closed && ! is_lock_closed; do
+  log "Closing lock"
+  #while is_door_closed && ! is_lock_closed; do
     set_output_high "close_lock"
     sleep ${ACTION_TIME}
     set_output_low "close_lock"
-    i="$((i+1))"
-    if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
-      break
-    fi
+  #  i="$((i+1))"
+  #  if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
+  #    break
+  #  fi
+  #done
+}
+
+highlight_lock() {
+  log "Highlighting lock"
+  #while is_door_closed && ! is_lock_closed; do
+  for ((i=0; i<10; i++)); do
+    set_output_high "lock_led"
+    sleep ${ACTION_TIME}
+    sleep 1
+    set_output_low "lock_led"
+    sleep 0.5
   done
+  #  i="$((i+1))"
+  #  if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
+  #    break
+  #  fi
+  #done
 }
 
 open_lock() {
   local i=0
-  while is_door_closed && ! is_lock_opened; do
+  log "Opening lock"
+  #while is_door_closed && ! is_lock_opened; do
     set_output_high "open_lock"
     sleep ${ACTION_TIME}
     set_output_low "open_lock"
-    i="$((i+1))"
-    if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
-      break
-    fi
-  done
+  #  i="$((i+1))"
+  #  if [[ "${i}" -gt "${MAX_ITERATIONS}" ]]; then
+  #    break
+  #  fi
+  #done
 }
 
 set_door_closed_time() {
@@ -161,16 +183,19 @@ case "${ACTION}" in
   init)
     init
     ;;
-  print-state)
+  print_state|print-state)
     print_state
     ;;
-  close_lock)
+  highlight_lock|highlight-lock)
+    highlight_lock
+    ;;
+  close_lock|close-lock)
     close_lock
     ;;
-  open_lock)
+  open_lock|open-lock)
     open_lock
     ;;
-  auto_close_lock)
+  auto_close_lock|auto-close-lock)
     init
     auto_close_lock
     ;;

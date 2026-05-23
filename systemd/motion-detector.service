@@ -1,0 +1,11 @@
+[Unit]
+Description=Motion Detector
+After=rp-daemon.service
+
+[Service]
+ExecStart=/usr/local/bin/show-door-eye-on-motion
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
