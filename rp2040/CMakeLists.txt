@@ -14,6 +14,7 @@ add_executable(rp2040_gpio_bridge
     vpins.c
     pins.c
     lock.c
+    light.c
     io.c
 )
 

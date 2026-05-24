@@ -2,6 +2,7 @@
 #include "pins.h"
 #include "vpins.h"
 #include "lock.h"
+#include "light.h"
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
 
@@ -10,7 +11,6 @@
 int main(void) {
     stdio_usb_init();
     init_pins();
-    set_lock_leds();
 
     while (!stdio_usb_connected()) {
         sleep_ms(100);
@@ -23,6 +23,7 @@ int main(void) {
 
     while (true) {
         poll_vpins();
+        light_leds();
 
         int c = getchar_timeout_us(1000);
         if (c < 0) continue;
