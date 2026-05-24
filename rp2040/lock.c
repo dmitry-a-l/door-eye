@@ -3,18 +3,18 @@
 #include "hardware/gpio.h"
 #include "pico/stdlib.h"
 
-#define PIN_MOTOR_CLOSE        0
-#define PIN_MOTOR_OPEN         1
+#define PIN_MOTOR_OPEN         0
+#define PIN_MOTOR_CLOSE        1
 
 #define PIN_SENSOR_LOCK_OPEN   10   /* 1 - замок открыт,  0 - замок закрыт */
 #define PIN_SENSOR_DOOR_CLOSE  13   /* 1 - дверь закрыта, 0 - дверь открыта */
 
 #define POLL_INTERVAL_MS       100
-#define SETTLE_MS              400
+#define SETTLE_MS              300
 #define TIMEOUT_MS             3000
 
 void lock(void) {
-    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) { send("ERR - door is open");    return; }
+    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) { send("ERR - door is open");        return; }
     if (!gpio_get(PIN_SENSOR_LOCK_OPEN))  { send("ERR - lock already closed"); return; }
 
     gpio_put(PIN_MOTOR_CLOSE, 1);
@@ -30,6 +30,11 @@ void lock(void) {
     }
 
     gpio_put(PIN_MOTOR_CLOSE, 0);
+    sleep_ms(100);
+    gpio_put(PIN_MOTOR_OPEN, 1);
+    sleep_ms(100);
+    gpio_put(PIN_MOTOR_OPEN, 0);
+
     send("OK");
 }
 
@@ -50,5 +55,10 @@ void unlock(void) {
     }
 
     gpio_put(PIN_MOTOR_OPEN, 0);
+    sleep_ms(100);
+    gpio_put(PIN_MOTOR_CLOSE, 1);
+    sleep_ms(100);
+    gpio_put(PIN_MOTOR_CLOSE, 0);
+
     send("OK");
 }
