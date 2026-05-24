@@ -18,7 +18,7 @@ remote_run() {
 
 source etc/door-eye/app.env
 
-cmd="mkdir -p /etc/door-eye && mkdir -p ${LIB_DIR} && apt-get install -y socat mpv rsync"
+cmd="mkdir -p /etc/door-eye && mkdir -p ${JSON_PATH%/*} && apt-get install -y socat mpv rsync"
 remote_run "${HOST}" "${cmd}"
 
 rsync -ae ssh etc/door-eye/*.env $HOST:/etc/door-eye/
