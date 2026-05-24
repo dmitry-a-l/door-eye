@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+source /etc/door-eye/door-station.env
+
+declare -A KNOWN_CARDS
+while IFS='=' read -r key value; do
+  [[ "${key}" == CARD_* ]] || continue
+  card_no="${key#CARD_}"
+  KNOWN_CARDS["${card_no}"]="${value}"
+done < /etc/door-eye/authorized-cards.env
+
+log() {
+  echo "$*" >&2
+}
+
+capture_card() {
+  curl -s --digest -u "${HIK_USER}:${HIK_PASSWORD}" \
+    "http://${HIK_HOST}/ISAPI/AccessControl/CaptureCardInfo"
+}
+
+no_card_read_error() {
+  [[ "${1}" == *"<errorCode>805306369</errorCode>"* ]]
+}
+
+log "Started"
+
+while true; do
+  response="$(capture_card)" && rc=0 || rc=$?
+
+  if [[ $rc -ne 0 ]]; then
+    log "ERR curl failed (rc=${rc})"
+    sleep 5
+    continue
+  fi
+
+  card_no="$(echo "${response}" | jq -r '.CardInfo.cardNo // empty' 2>/dev/null || true)"
+  if [[ -n "${card_no}" ]]; then
+    name="${KNOWN_CARDS[${card_no}]:-}"
+    if [[ -n "${name}" ]]; then
+      log "ACCESS GRANTED | ${name}"
+      /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
+    else
+      log "ACCESS DENIED | unknown card: ${card_no}"
+    fi
+    sleep 5
+    continue
+  fi
+
+  if no_card_read_error "${response}"; then
+    continue
+  fi
+
+  log "ERR unexpected response: ${response}"
+  sleep 5
+done

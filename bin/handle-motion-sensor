@@ -4,9 +4,9 @@ source /etc/door-eye/rp.env
 source /etc/door-eye/app.env
 
 HDMI_CTL_PATH="/sys/class/drm/card1-HDMI-A-1/status"
-POLL_INTERVAL=0.5
+POLL_INTERVAL=1
 CONNECT_TIMEOUT=3        # макс. сек на ожидание connected после echo on
-CONNECT_SETTLE=0.5       # доп. пауза после connected, чтобы modeset устаканился
+CONNECT_SETTLE=1       # доп. пауза после connected, чтобы modeset устаканился
 
 log() {
     echo "$1" >&2
@@ -48,13 +48,17 @@ turn_screen_off() {
     screen_on=0
 }
 
-turn_on() {
+handle_motion_detected() {
+    log "Motion detected"
+    systemctl start autounlock
     turn_screen_on
     systemctl start show-door-eye
     systemctl restart update-door-eye-osd
 }
 
-turn_off() {
+handle_motion_cleared() {
+    log "Motion cleared"
+    systemctl stop autounlock
     systemctl stop show-door-eye
     turn_screen_off
 }
@@ -70,11 +74,9 @@ fi
 while true; do
     if pin100=$(/usr/local/bin/rp-cmd "GET 100" 2>/dev/null); then
         if [[ "${pin100}" == "1" && "${screen_on}" != "1" ]]; then
-            log "Motion detected"
-            turn_on
+            handle_motion_detected
         elif [[ "${pin100}" == "0" && "${screen_on}" != "0" ]]; then
-            log "Motion cleared"
-            turn_off
+            handle_motion_cleared
         fi
     else
         log "Skipping unexpected rp-cmd output: ${pin100}"

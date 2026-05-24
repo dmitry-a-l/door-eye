@@ -1,0 +1,13 @@
+[Unit]
+Description=Auto Unlock Daemon
+After=rp-daemon.service
+Requires=rp-daemon.service
+
+[Service]
+EnvironmentFile=/etc/door-eye/door-station.env
+ExecStart=/usr/local/bin/autounlock
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
