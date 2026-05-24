@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+source /etc/door-eye/rp.env
+
+log() {
+    echo "$1" >&2
+}
+
+mkdir -p "$RP_RESULT_DIR"
+chmod 770 "$RP_RESULT_DIR"
+rm -f "$RP_RESULT_DIR"/*
+
+rm -f "$RP_FIFO"
+mkfifo "$RP_FIFO"
+chmod 660 "$RP_FIFO"
+
+stty -F "$RP_PORT" "$RP_BAUD" cs8 -cstopb -parenb raw -echo
+
+exec 3<"$RP_PORT" 4>"$RP_PORT"
+exec 5<>"$RP_FIFO"
+
+log "Started on port $RP_PORT"
+
+CLEANUP_INTERVAL=60
+last_cleanup="$EPOCHSECONDS"
+
+while true; do
+    # чистка устаревших файлов
+    if [[ $(( EPOCHSECONDS - last_cleanup )) -ge $CLEANUP_INTERVAL ]]; then
+        find "$RP_RESULT_DIR" -maxdepth 1 -type f -mmin +1 -delete
+        last_cleanup=$EPOCHSECONDS
+    fi
+
+    if read -t "$RP_TIMEOUT" line <"$RP_FIFO"; then
+        pid="${line%% *}"
+        cmd="${line#* }"
+        log "cmd from pid $pid: $cmd"
+
+        printf '%s\n' "$cmd" >&4
+
+        if read -t "$RP_TIMEOUT" response <&3; then
+            response="${response%$'\r'}"
+        else
+            response="ERR timeout"
+            log "ERR - no response from RP2040 for cmd: $cmd"
+            exec 3<"$RP_PORT" 4>"$RP_PORT"
+        fi
+
+        log "response to pid $pid: $response"
+        echo "$response" > "$RP_RESULT_DIR/$pid"
+    fi
+done

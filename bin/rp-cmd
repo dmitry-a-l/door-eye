@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+source /etc/door-eye/rp.env
+
+RESULT_FILE="$RP_RESULT_DIR/$$"
+trap "rm -f $RESULT_FILE" EXIT
+
+echo "$$ $1" > "$RP_FIFO"
+
+deadline=$(( EPOCHSECONDS + RP_TIMEOUT ))
+
+while [[ ! -f "$RESULT_FILE" ]]; do
+    if [[ $EPOCHSECONDS -ge $deadline ]]; then
+        echo "ERR timeout"
+        exit 1
+    fi
+    sleep 0.05
+done
+
+cat "$RESULT_FILE"
