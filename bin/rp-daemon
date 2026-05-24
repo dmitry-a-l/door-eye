@@ -9,7 +9,6 @@ log() {
 
 mkdir -p "$RP_RESULT_DIR"
 chmod 770 "$RP_RESULT_DIR"
-rm -f "$RP_RESULT_DIR"/*
 
 rm -f "$RP_FIFO"
 mkfifo "$RP_FIFO"
