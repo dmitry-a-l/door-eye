@@ -15,6 +15,7 @@ log() {
 
 log "Requesting weather data from OpenMeteo API"
 if DATA="$(curl -fs "${URL}")"; then
+  mkdir -p ${JSON_PATH%/*}
   echo "${DATA}" > "${JSON_PATH}.tmp"
   mv "${JSON_PATH}.tmp" "${JSON_PATH}"
   log "Successfully downloaded weather data to ${JSON_PATH}"

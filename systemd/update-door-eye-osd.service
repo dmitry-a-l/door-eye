@@ -7,7 +7,7 @@ Requires=show-door-eye.service
 EnvironmentFile=/etc/door-eye/app.env
 EnvironmentFile=/etc/door-eye/open-meteo.env
 ExecStart=/usr/local/bin/update-door-eye-osd
-RestartSec=1
+RestartSec=5
 Restart=always
 
 [Install]

@@ -2,16 +2,16 @@
 
 set -Eeuo pipefail
 
+mkdir -p ${SOCK_PATH%/*}
+
 /usr/bin/mpv --quiet \
              --no-config \
              --cache=no \
              --hr-seek=no \
              --profile=low-latency  \
-             --untimed \
-             --no-cache \
-             --no-correct-pts \
-             --stream-buffer-size=4KiB \
              --vf=crop="${VIDEO_CROP_PARAMS}" \
+             --drm-connector=HDMI-A-1 \
+             --drm-mode=480x480 \
              --osd-duration=10000 \
              --osd-align-x=center \
              --osd-margin-y=50 \

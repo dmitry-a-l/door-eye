@@ -3,7 +3,7 @@ Description=Motion Detector
 After=rp-daemon.service
 
 [Service]
-ExecStart=/usr/local/bin/show-door-eye-on-motion
+ExecStart=/usr/local/bin/handle-motion-sensor
 Restart=always
 RestartSec=5
 

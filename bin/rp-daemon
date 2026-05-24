@@ -3,7 +3,8 @@
 source /etc/door-eye/rp.env
 
 log() {
-    echo "$1" >&2
+    #echo "$1" >&2
+    :
 }
 
 mkdir -p "$RP_RESULT_DIR"

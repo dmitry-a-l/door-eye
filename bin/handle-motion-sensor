@@ -1,0 +1,84 @@
+#!/bin/bash
+
+source /etc/door-eye/rp.env
+source /etc/door-eye/app.env
+
+HDMI_CTL_PATH="/sys/class/drm/card1-HDMI-A-1/status"
+POLL_INTERVAL=0.5
+CONNECT_TIMEOUT=3        # макс. сек на ожидание connected после echo on
+CONNECT_SETTLE=0.5       # доп. пауза после connected, чтобы modeset устаканился
+
+log() {
+    echo "$1" >&2
+}
+
+set_connector() {
+    local mode="${1}"
+    log "Setting connector ${mode}"
+    echo "${mode}" > "${HDMI_CTL_PATH}"
+}
+
+is_screen_connected() {
+    [[ "$(cat "${HDMI_CTL_PATH}")" == "connected" ]]
+}
+
+wait_screen_connected() {
+    local deadline=$(( EPOCHSECONDS + CONNECT_TIMEOUT ))
+    while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
+        if is_screen_connected; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    log "WARN: connector did not become connected within ${CONNECT_TIMEOUT}s"
+    return 1
+}
+
+turn_screen_on() {
+    set_connector on
+    wait_screen_connected
+    sleep "${CONNECT_SETTLE}"
+    screen_on=1
+}
+
+turn_screen_off() {
+    sleep "${CONNECT_SETTLE}"
+    # дать mpv действительно закрыть DRM до того, как мы отключим коннектор
+    set_connector off
+    screen_on=0
+}
+
+turn_on() {
+    turn_screen_on
+    systemctl start show-door-eye
+    systemctl restart update-door-eye-osd
+}
+
+turn_off() {
+    systemctl stop show-door-eye
+    turn_screen_off
+}
+
+log "Started"
+
+if is_screen_connected; then
+  screen_on=1
+else
+  screen_on=0
+fi
+
+while true; do
+    if pin100=$(/usr/local/bin/rp-cmd "GET 100" 2>/dev/null); then
+        if [[ "${pin100}" == "1" && "${screen_on}" != "1" ]]; then
+            log "Motion detected"
+            turn_on
+        elif [[ "${pin100}" == "0" && "${screen_on}" != "0" ]]; then
+            log "Motion cleared"
+            turn_off
+        fi
+    else
+        log "Skipping unexpected rp-cmd output: ${pin100}"
+    fi
+
+    sleep "${POLL_INTERVAL}"
+done

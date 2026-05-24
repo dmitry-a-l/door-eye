@@ -6,6 +6,7 @@ Requires=download-weather-data.service
 Unit=download-weather-data.service
 OnCalendar=*:0,15,30,45
 RandomizedDelaySec=30s
+OnBootSec=15s
 
 [Install]
 WantedBy=timers.target
