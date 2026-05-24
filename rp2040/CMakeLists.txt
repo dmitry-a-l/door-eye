@@ -13,6 +13,8 @@ add_executable(rp2040_gpio_bridge
     commands.c
     vpins.c
     pins.c
+    lock.c
+    io.c
 )
 
 target_link_libraries(rp2040_gpio_bridge

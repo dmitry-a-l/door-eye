@@ -1,4 +1,6 @@
 #include "commands.h"
+#include "io.h"
+#include "lock.h"
 #include "pins.h"
 #include "vpins.h"
 #include "pico/stdlib.h"
@@ -14,23 +16,6 @@
 
 #define PIN_COUNT  29
 #define LED_PIN    25
-
-/* ── вывод ────────────────────────────────────────────────────── */
-
-void send(const char *s) {
-    printf("%s\n", s);
-    stdio_flush();
-}
-
-static void sendf(const char *fmt, ...) {
-    char buf[64];
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    printf("%s\n", buf);
-    stdio_flush();
-}
 
 /* ── валидация пинов ──────────────────────────────────────────── */
 
@@ -95,6 +80,16 @@ static void handle_cmd_reboot(void) {
     watchdog_reboot(0, 0, 0);
 }
 
+static void handle_cmd_lock(void) {
+    lock();
+    send("OK");
+}
+
+static void handle_cmd_unlock(void) {
+    unlock();
+    send("OK");
+}
+
 /* ── точка входа ──────────────────────────────────────────────── */
 
 void commands_handle(char *line) {
@@ -111,6 +106,8 @@ void commands_handle(char *line) {
     if (!strcmp(cmd, "GET"))      { handle_cmd_get(n, a1);     return; }
     if (!strcmp(cmd, "BOOTLOAD")) { handle_cmd_bootload();     return; }
     if (!strcmp(cmd, "REBOOT"))   { handle_cmd_reboot();       return; }
+    if (!strcmp(cmd, "LOCK"))     { handle_cmd_lock();         return; }
+    if (!strcmp(cmd, "UNLOCK"))   { handle_cmd_unlock();       return; }
 
     sendf("ERR - unknown command: %s", cmd);
 }

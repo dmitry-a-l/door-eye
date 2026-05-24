@@ -1,6 +1,7 @@
 #include "commands.h"
 #include "pins.h"
 #include "vpins.h"
+#include "lock.h"
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
 
@@ -9,6 +10,7 @@
 int main(void) {
     stdio_usb_init();
     init_pins();
+    set_lock_leds();
 
     while (!stdio_usb_connected()) {
         sleep_ms(100);

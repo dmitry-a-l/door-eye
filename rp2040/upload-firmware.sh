@@ -20,3 +20,7 @@ umount /mnt
 
 # закрыть
 exec 3<&- 4>&-
+
+#PWI=/sys/bus/usb/devices/1-1.2/power/
+#echo 0 > $PWI/autosuspend_delay_ms && echo suspend > $PWI/level
+#echo on > $PWI/level
