@@ -13,9 +13,15 @@
 #define SETTLE_MS              300
 #define TIMEOUT_MS             3000
 
-void lock(void) {
-    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) { send("ERR - door is open");        return; }
-    if (!gpio_get(PIN_SENSOR_LOCK_OPEN))  { send("ERR - lock already closed"); return; }
+void close_lock(bool silent) {
+    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) {
+        if (!silent) send("ERR - door is open");
+        return;
+    }
+    if (!gpio_get(PIN_SENSOR_LOCK_OPEN)) {
+        if (!silent) send("ERR - lock already closed");
+        return;
+    }
 
     gpio_put(PIN_MOTOR_CLOSE, 1);
 
@@ -30,17 +36,22 @@ void lock(void) {
     }
 
     gpio_put(PIN_MOTOR_CLOSE, 0);
-    sleep_ms(100);
     gpio_put(PIN_MOTOR_OPEN, 1);
     sleep_ms(100);
     gpio_put(PIN_MOTOR_OPEN, 0);
 
-    send("OK");
+    if (!silent) send("OK");
 }
 
-void unlock(void) {
-    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) { send("ERR - door is open");      return; }
-    if (gpio_get(PIN_SENSOR_LOCK_OPEN))   { send("ERR - lock already open"); return; }
+void open_lock(bool silent) {
+    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) {
+        if (!silent) send("ERR - door is open");
+        return;
+    }
+    if (gpio_get(PIN_SENSOR_LOCK_OPEN)) {
+        if (!silent) send("ERR - lock already open");
+        return;
+    }
 
     gpio_put(PIN_MOTOR_OPEN, 1);
 
@@ -55,10 +66,9 @@ void unlock(void) {
     }
 
     gpio_put(PIN_MOTOR_OPEN, 0);
-    sleep_ms(100);
     gpio_put(PIN_MOTOR_CLOSE, 1);
     sleep_ms(100);
     gpio_put(PIN_MOTOR_CLOSE, 0);
 
-    send("OK");
+    if (!silent) send("OK");
 }

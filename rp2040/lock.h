@@ -1,4 +1,6 @@
 #pragma once
 
-void lock(void);
-void unlock(void);
+#include <stdbool.h>
+
+void open_lock(bool silent);
+void close_lock(bool silent);

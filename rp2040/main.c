@@ -3,6 +3,7 @@
 #include "vpins.h"
 #include "lock.h"
 #include "light.h"
+#include "autolock.h"
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
 
@@ -23,6 +24,7 @@ int main(void) {
 
     while (true) {
         poll_vpins();
+        autolock_poll();
         light_leds();
 
         int c = getchar_timeout_us(1000);

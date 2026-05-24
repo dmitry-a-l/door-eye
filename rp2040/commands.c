@@ -81,12 +81,12 @@ static void handle_cmd_reboot(void) {
 }
 
 static void handle_cmd_lock(void) {
-    lock();
+    close_lock(false);
     send("OK");
 }
 
 static void handle_cmd_unlock(void) {
-    unlock();
+    open_lock(false);
     send("OK");
 }
 
@@ -106,8 +106,8 @@ void commands_handle(char *line) {
     if (!strcmp(cmd, "GET"))      { handle_cmd_get(n, a1);     return; }
     if (!strcmp(cmd, "BOOTLOAD")) { handle_cmd_bootload();     return; }
     if (!strcmp(cmd, "REBOOT"))   { handle_cmd_reboot();       return; }
-    if (!strcmp(cmd, "LOCK"))     { handle_cmd_lock();         return; }
-    if (!strcmp(cmd, "UNLOCK"))   { handle_cmd_unlock();       return; }
+    if (!strcmp(cmd, "LOCK"))     { close_lock(false);         return; }
+    if (!strcmp(cmd, "UNLOCK"))   { open_lock(false);          return; }
 
     sendf("ERR - unknown command: %s", cmd);
 }
