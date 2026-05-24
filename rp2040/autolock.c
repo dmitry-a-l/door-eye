@@ -25,12 +25,20 @@ void autolock_poll(void) {
     bool lock_open   = gpio_get(PIN_SENSOR_LOCK_OPEN);
     uint32_t now     = to_ms_since_boot(get_absolute_time());
 
+    static bool initialized  = false;
     static bool last_door_closed = false;
     static bool last_lock_open   = false;
     static uint32_t door_closed_at = 0;
     static uint32_t lock_opened_at = 0;
     static bool warned_door = false;
     static bool warned_lock = false;
+
+    if (!initialized) {
+        last_door_closed = door_closed;
+        last_lock_open   = lock_open;
+        initialized      = true;
+        return;
+    }
 
     /* дверь только что закрылась */
     if (door_closed && !last_door_closed) {
