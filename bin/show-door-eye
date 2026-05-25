@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -Eeuo pipefail
 
 mkdir -p ${SOCK_PATH%/*}
@@ -9,9 +8,8 @@ mkdir -p ${SOCK_PATH%/*}
              --cache=no \
              --hr-seek=no \
              --profile=low-latency  \
+             --stream-buffer-size=4KiB \
              --vf=crop="${VIDEO_CROP_PARAMS}" \
-             --drm-connector=HDMI-A-1 \
-             --drm-mode=480x480 \
              --osd-duration=10000 \
              --osd-align-x=center \
              --osd-margin-y=50 \
@@ -21,4 +19,7 @@ mkdir -p ${SOCK_PATH%/*}
              --hwdec-codecs=h264 \
              --swapchain-depth=8 \
              --sws-fast=yes \
+             --drm-device="${DRM_NODE}" \
+             --drm-connector=${HDMI_CONNECTOR} \
+             --drm-mode=${SCREEN_RESOLUTION} \
              ${STREAM_URL} "${@}"

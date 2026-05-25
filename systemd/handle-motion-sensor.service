@@ -1,8 +1,9 @@
 [Unit]
-Description=Motion Detector
+Description=Motion Detection Handler
 After=rp-daemon.service
 
 [Service]
+EnvironmentFile=/etc/door-eye/screen.env
 ExecStart=/usr/local/bin/handle-motion-sensor
 Restart=always
 RestartSec=5

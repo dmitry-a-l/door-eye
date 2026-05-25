@@ -4,54 +4,82 @@ set -Eeuo pipefail
 
 source /etc/door-eye/door-station.env
 
-declare -A KNOWN_CARDS
-while IFS='=' read -r key value; do
-  [[ "${key}" == CARD_* ]] || continue
-  card_no="${key#CARD_}"
-  KNOWN_CARDS["${card_no}"]="${value}"
-done < /etc/door-eye/authorized-cards.env
+POLL_INTERVAL=1
+EVENT_WINDOW=2
 
 log() {
   echo "$*" >&2
 }
 
-capture_card() {
+query_events() {
+  local start
+  start="$(TZ=Asia/Tomsk date -d "${EVENT_WINDOW} seconds ago" '+%Y-%m-%d %H:%M:%S')"
+  end="$(TZ=Asia/Tomsk date -d "1 second" '+%Y-%m-%d %H:%M:%S')"
+
   curl -s --digest -u "${HIK_USER}:${HIK_PASSWORD}" \
-    "http://${HIK_HOST}/ISAPI/AccessControl/CaptureCardInfo"
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"AcsEventCond\":{\"searchID\":\"1\",\"searchResultPosition\":0,\"maxResults\":10,\"major\":5,\"minor\":0,\"startTime\":\"${start}\",\"endTime\":\"${end}\"}}" \
+    "http://${HIK_HOST}/ISAPI/AccessControl/AcsEvent?format=json"
 }
 
-no_card_read_error() {
-  [[ "${1}" == *"<errorCode>805306369</errorCode>"* ]]
+handle_card_access() {
+  local event="${1}"
+  local name card
+  name="$(echo "${event}" | jq -r '.name // "unknown"')"
+  card="$(echo "${event}" | jq -r '.cardNo // "unknown"')"
+  log "ACCESS GRANTED | ${name} | card: ${card} | sending UNLOCK"
+  /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
+}
+
+handle_indoor_button() {
+  log "DOOR OPENED | изнутри с видеопанели | sending UNLOCK"
+  /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
 }
 
 log "Started"
 
+last_event_time=""
+
 while true; do
-  response="$(capture_card)" && rc=0 || rc=$?
+  response="$(query_events)" && rc=0 || rc=$?
 
   if [[ $rc -ne 0 ]]; then
     log "ERR curl failed (rc=${rc})"
-    sleep 5
+    sleep "${POLL_INTERVAL}"
     continue
   fi
 
-  card_no="$(echo "${response}" | jq -r '.CardInfo.cardNo // empty' 2>/dev/null || true)"
-  if [[ -n "${card_no}" ]]; then
-    name="${KNOWN_CARDS[${card_no}]:-}"
-    if [[ -n "${name}" ]]; then
-      log "ACCESS GRANTED | ${name}"
-      /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
-    else
-      log "ACCESS DENIED | unknown card: ${card_no}"
-    fi
-    sleep 5
-    continue
+  matches="$(echo "${response}" | jq -r '.AcsEvent.numOfMatches // 0')"
+  door_opened=0
+
+  if [[ "${matches}" -gt 0 ]]; then
+    while IFS= read -r event; do
+      event_time="$(echo "${event}" | jq -r '.time')"
+      minor="$(echo "${event}" | jq -r '.minor')"
+
+      if [[ "${event_time}" == "${last_event_time}" ]]; then
+        continue
+      fi
+
+      case "${minor}" in
+        1)
+          last_event_time="${event_time}"
+          handle_card_access "${event}"
+          door_opened=1
+          ;;
+        158)
+          last_event_time="${event_time}"
+          handle_indoor_button
+          door_opened=1
+          ;;
+      esac
+    done < <(echo "${response}" | jq -c '.AcsEvent.InfoList[]')
   fi
 
-  if no_card_read_error "${response}"; then
-    continue
+  if [[ "${door_opened}" -eq 1 ]]; then
+    sleep 10
+  else
+    sleep "${POLL_INTERVAL}"
   fi
-
-  log "ERR unexpected response: ${response}"
-  sleep 5
 done

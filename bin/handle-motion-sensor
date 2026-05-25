@@ -1,12 +1,9 @@
 #!/bin/bash
 
-source /etc/door-eye/rp.env
-source /etc/door-eye/app.env
-
-HDMI_CTL_PATH="/sys/class/drm/card1-HDMI-A-1/status"
 POLL_INTERVAL=1
-CONNECT_TIMEOUT=3        # макс. сек на ожидание connected после echo on
-CONNECT_SETTLE=1       # доп. пауза после connected, чтобы modeset устаканился
+HDMI_CONNECT_TIMEOUT=3       # макс. сек на ожидание connected после echo on
+HDMI_DISCONNECT_SETTLE=5     # доп. пауза после connected, чтобы modeset устаканился
+DRM_WAIT_TIMEOUT=3           #  макс. сек на ожидание появления DRM устройства
 
 log() {
     echo "$1" >&2
@@ -18,39 +15,53 @@ set_connector() {
     echo "${mode}" > "${HDMI_CTL_PATH}"
 }
 
-is_screen_connected() {
+is_hdmi_connected() {
     [[ "$(cat "${HDMI_CTL_PATH}")" == "connected" ]]
 }
 
-wait_screen_connected() {
-    local deadline=$(( EPOCHSECONDS + CONNECT_TIMEOUT ))
+wait_hdmi_connected() {
+    local deadline=$(( EPOCHSECONDS + HDMI_CONNECT_TIMEOUT ))
     while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
-        if is_screen_connected; then
+        if is_hdmi_connected; then
             return 0
         fi
         sleep 0.1
     done
-    log "WARN: connector did not become connected within ${CONNECT_TIMEOUT}s"
-    return 1
+    log "ERROR: connector did not become connected within ${HDMI_CONNECT_TIMEOUT}s"
+    exit 1
 }
+
+wait_drm_presented() {
+    local deadline=$(( EPOCHSECONDS + DRM_WAIT_TIMEOUT ))
+    while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
+        if [[ -e "${DRM_NODE}" ]]; then
+            return 0
+        fi
+        sleep 0.1
+    done
+
+    log "ERROR: ${DRM_NODE} did not appear within ${DRM_WAIT_TIMEOUT}s"
+    exit 1
+}
+
 
 turn_screen_on() {
     set_connector on
-    wait_screen_connected
-    sleep "${CONNECT_SETTLE}"
+    wait_hdmi_connected
+    wait_drm_presented
     screen_on=1
 }
 
 turn_screen_off() {
-    sleep "${CONNECT_SETTLE}"
-    # дать mpv действительно закрыть DRM до того, как мы отключим коннектор
     set_connector off
+    TERM=linux clear > /dev/tty1
+    sleep "${HDMI_DISCONNECT_SETTLE}"
+    # дать mpv действительно закрыть DRM до того, как мы отключим коннектор
     screen_on=0
 }
 
 handle_motion_detected() {
     log "Motion detected"
-    systemctl start autounlock
     turn_screen_on
     systemctl start show-door-eye
     systemctl restart update-door-eye-osd
@@ -58,14 +69,14 @@ handle_motion_detected() {
 
 handle_motion_cleared() {
     log "Motion cleared"
-    systemctl stop autounlock
+    TERM=linux clear > /dev/tty1
     systemctl stop show-door-eye
     turn_screen_off
 }
 
 log "Started"
 
-if is_screen_connected; then
+if is_hdmi_connected; then
   screen_on=1
 else
   screen_on=0
