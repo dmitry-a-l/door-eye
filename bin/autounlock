@@ -12,9 +12,9 @@ log() {
 }
 
 query_events() {
-  local start
-  start="$(TZ=Asia/Tomsk date -d "${EVENT_WINDOW} seconds ago" '+%Y-%m-%d %H:%M:%S')"
-  end="$(TZ=Asia/Tomsk date -d "1 second" '+%Y-%m-%d %H:%M:%S')"
+  local start end
+  start="$(date -u -d "${EVENT_WINDOW} seconds ago" '+%Y-%m-%dT%H:%M:%SZ')"
+  end="$(date -u -d "${EVENT_WINDOW} seconds" '+%Y-%m-%dT%H:%M:%SZ')"
 
   curl -s --digest -u "${HIK_USER}:${HIK_PASSWORD}" \
     -X POST \
@@ -23,13 +23,20 @@ query_events() {
     "http://${HIK_HOST}/ISAPI/AccessControl/AcsEvent?format=json"
 }
 
-handle_card_access() {
+handle_authorized_card() {
   local event="${1}"
   local name card
   name="$(echo "${event}" | jq -r '.name // "unknown"')"
   card="$(echo "${event}" | jq -r '.cardNo // "unknown"')"
   log "ACCESS GRANTED | ${name} | card: ${card} | sending UNLOCK"
   /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
+}
+
+handle_unauthorized_card() {
+  local event="${1}"
+  local card
+  card="$(echo "${event}" | jq -r '.cardNo // "unknown"')"
+  log "ACCESS DENIED | unauthorized card: ${card}"
 }
 
 handle_indoor_button() {
@@ -42,10 +49,9 @@ log "Started"
 last_event_time=""
 
 while true; do
-  response="$(query_events)" && rc=0 || rc=$?
-
-  if [[ $rc -ne 0 ]]; then
-    log "ERR curl failed (rc=${rc})"
+  response="$(query_events)"
+  if [[ $? != 0 ]]; then
+    log "ERR curl failed"
     sleep "${POLL_INTERVAL}"
     continue
   fi
@@ -65,8 +71,12 @@ while true; do
       case "${minor}" in
         1)
           last_event_time="${event_time}"
-          handle_card_access "${event}"
+          handle_authorized_card "${event}"
           door_opened=1
+          ;;
+        9)
+          last_event_time="${event_time}"
+          handle_unauthorized_card "${event}"
           ;;
         158)
           last_event_time="${event_time}"
