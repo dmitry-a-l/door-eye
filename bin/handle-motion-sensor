@@ -3,7 +3,8 @@
 POLL_INTERVAL=1
 HDMI_CONNECT_TIMEOUT=3       # макс. сек на ожидание connected после echo on
 HDMI_DISCONNECT_SETTLE=5     # доп. пауза после connected, чтобы modeset устаканился
-DRM_WAIT_TIMEOUT=3           #  макс. сек на ожидание появления DRM устройства
+DRM_WAIT_TIMEOUT=3           # макс. сек на ожидание появления DRM устройства
+DRM_APPEARING_SETTLE=1       # доп. пауза после появления drm
 
 log() {
     echo "$1" >&2
@@ -49,6 +50,7 @@ turn_screen_on() {
     set_connector on
     wait_hdmi_connected
     wait_drm_presented
+    sleep "${DRM_APPEARING_SETTLE}"
     screen_on=1
 }
 
