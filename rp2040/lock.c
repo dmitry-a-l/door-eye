@@ -10,7 +10,8 @@
 #define PIN_SENSOR_DOOR_CLOSE  13   /* 1 - дверь закрыта, 0 - дверь открыта */
 
 #define POLL_INTERVAL_MS       100
-#define SETTLE_MS              300
+#define CLOSE_SETTLE_MS        300
+#define OPEN_SETTLE_MS         400
 #define TIMEOUT_MS             3000
 
 void close_lock(bool silent) {
@@ -22,6 +23,7 @@ void close_lock(bool silent) {
         if (!silent) send("ERR - lock already closed");
         return;
     }
+    if (!silent) send("OK");
 
     gpio_put(PIN_MOTOR_CLOSE, 1);
 
@@ -30,7 +32,7 @@ void close_lock(bool silent) {
         sleep_ms(POLL_INTERVAL_MS);
         elapsed += POLL_INTERVAL_MS;
         if (!gpio_get(PIN_SENSOR_LOCK_OPEN)) {
-            sleep_ms(SETTLE_MS);
+            sleep_ms(CLOSE_SETTLE_MS);
             break;
         }
     }
@@ -39,8 +41,6 @@ void close_lock(bool silent) {
     gpio_put(PIN_MOTOR_OPEN, 1);
     sleep_ms(100);
     gpio_put(PIN_MOTOR_OPEN, 0);
-
-    if (!silent) send("OK");
 }
 
 void open_lock(bool silent) {
@@ -52,6 +52,7 @@ void open_lock(bool silent) {
         if (!silent) send("ERR - lock already open");
         return;
     }
+    if (!silent) send("OK");
 
     gpio_put(PIN_MOTOR_OPEN, 1);
 
@@ -60,7 +61,7 @@ void open_lock(bool silent) {
         sleep_ms(POLL_INTERVAL_MS);
         elapsed += POLL_INTERVAL_MS;
         if (gpio_get(PIN_SENSOR_LOCK_OPEN)) {
-            sleep_ms(SETTLE_MS);
+            sleep_ms(OPEN_SETTLE_MS);
             break;
         }
     }
@@ -69,6 +70,4 @@ void open_lock(bool silent) {
     gpio_put(PIN_MOTOR_CLOSE, 1);
     sleep_ms(100);
     gpio_put(PIN_MOTOR_CLOSE, 0);
-
-    if (!silent) send("OK");
 }
