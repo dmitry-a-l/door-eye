@@ -1,10 +1,12 @@
 #!/bin/bash
 
 POLL_INTERVAL=1
-HDMI_CONNECT_TIMEOUT=3       # макс. сек на ожидание connected после echo on
-HDMI_DISCONNECT_SETTLE=5     # доп. пауза после connected, чтобы modeset устаканился
-DRM_WAIT_TIMEOUT=3           # макс. сек на ожидание появления DRM устройства
-DRM_APPEARING_SETTLE=1       # доп. пауза после появления drm
+HDMI_CONNECT_TIMEOUT=10              # макс. сек на ожидание первого connected
+HDMI_STABLE_DURATION=3               # сек подряд connected, чтобы считать стабильным
+HDMI_STABLE_POLL=0.1                 # период опроса при мониторинге стабильности
+HDMI_DISCONNECT_SETTLE=0.3
+DRM_WAIT_TIMEOUT=3
+TURN_ON_MAX_ATTEMPTS=3
 
 log() {
     echo "$1" >&2
@@ -29,7 +31,40 @@ wait_hdmi_connected() {
         sleep 0.1
     done
     log "ERROR: connector did not become connected within ${HDMI_CONNECT_TIMEOUT}s"
-    exit 1
+    return 1
+}
+
+# Ждём, пока статус останется connected непрерывно ${HDMI_STABLE_DURATION} секунд.
+# Если в течение этого времени словили disconnected — пишем в лог и отсчёт стабильности сбрасывается.
+# Общий бюджет времени: HDMI_CONNECT_TIMEOUT (на случай долгих флапов).
+wait_hdmi_stable() {
+    local needed_polls
+    needed_polls=$(awk "BEGIN { print int(${HDMI_STABLE_DURATION} / ${HDMI_STABLE_POLL}) }")
+    local streak=0
+    local flap_count=0
+    local deadline=$(( EPOCHSECONDS + HDMI_CONNECT_TIMEOUT ))
+
+    while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
+        if is_hdmi_connected; then
+            streak=$(( streak + 1 ))
+            if [[ ${streak} -ge ${needed_polls} ]]; then
+                if [[ ${flap_count} -gt 0 ]]; then
+                    log "Connector stabilised after ${flap_count} flap(s)"
+                fi
+                return 0
+            fi
+        else
+            if [[ ${streak} -gt 0 ]]; then
+                flap_count=$(( flap_count + 1 ))
+                log "Connector flapped to disconnected (flap #${flap_count}, streak was ${streak})"
+            fi
+            streak=0
+        fi
+        sleep "${HDMI_STABLE_POLL}"
+    done
+
+    log "ERROR: connector did not stay stable for ${HDMI_STABLE_DURATION}s within ${HDMI_CONNECT_TIMEOUT}s"
+    return 1
 }
 
 wait_drm_presented() {
@@ -40,31 +75,38 @@ wait_drm_presented() {
         fi
         sleep 0.1
     done
-
     log "ERROR: ${DRM_NODE} did not appear within ${DRM_WAIT_TIMEOUT}s"
-    exit 1
+    return 1
 }
 
-
 turn_screen_on() {
-    set_connector on
-    wait_hdmi_connected
-    wait_drm_presented
-    sleep "${DRM_APPEARING_SETTLE}"
-    screen_on=1
+    local attempt
+    for (( attempt = 1; attempt <= TURN_ON_MAX_ATTEMPTS; attempt++ )); do
+        set_connector on
+        if wait_hdmi_connected && wait_drm_presented && wait_hdmi_stable; then
+            screen_on=1
+            return 0
+        fi
+        log "turn_screen_on attempt ${attempt} failed, retrying"
+        set_connector off
+        sleep 1
+    done
+    log "ERROR: turn_screen_on gave up after ${TURN_ON_MAX_ATTEMPTS} attempts"
+    return 1
 }
 
 turn_screen_off() {
+    sleep "${HDMI_DISCONNECT_SETTLE}"
     set_connector off
     TERM=linux clear > /dev/tty1
-    sleep "${HDMI_DISCONNECT_SETTLE}"
-    # дать mpv действительно закрыть DRM до того, как мы отключим коннектор
     screen_on=0
 }
 
 handle_motion_detected() {
     log "Motion detected"
-    turn_screen_on
+    if ! turn_screen_on; then
+        return
+    fi
     systemctl start show-door-eye
     systemctl restart update-door-eye-osd
 }
@@ -79,9 +121,9 @@ handle_motion_cleared() {
 log "Started"
 
 if is_hdmi_connected; then
-  screen_on=1
+    screen_on=1
 else
-  screen_on=0
+    screen_on=0
 fi
 
 while true; do
@@ -94,6 +136,5 @@ while true; do
     else
         log "Skipping unexpected rp-cmd output: ${pin100}"
     fi
-
     sleep "${POLL_INTERVAL}"
 done
