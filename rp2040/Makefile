@@ -10,4 +10,6 @@ compile:
   	make -j$(nproc)"
 
 install:
-	cp build/rp2040_gpio_bridge.uf2 /Volumes/RPI-RP2/
+	scp build/rp2040_gpio_bridge.uf2 dragon:
+	scp upload-firmware.sh dragon:
+	ssh dragon ./upload-firmware.sh
