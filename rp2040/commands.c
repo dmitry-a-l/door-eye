@@ -14,17 +14,12 @@
 #include <ctype.h>
 #include <stdarg.h>
 
-#define PIN_COUNT  29
-#define LED_PIN    25
+#define MAX_CMD_LEN  64
 
 /* ── валидация пинов ──────────────────────────────────────────── */
 
 extern const pin_config_t PIN_CONFIG[];
 extern const int          PIN_CONFIG_COUNT;
-
-static bool pin_valid(int pin) {
-    return pin >= 0 && pin < PIN_COUNT && pin != LED_PIN;
-}
 
 static bool pin_is_output(int pin) {
     for (int i = 0; i < PIN_CONFIG_COUNT; i++) {
@@ -62,7 +57,6 @@ static void handle_cmd_get(int n, const char *a1) {
     int pin = atoi(a1);
     if (pin == VPIN100)     { send(get_vpin100() ? "1" : "0");         return; }
     if (pin == VPIN200)     { send(get_vpin200() ? "1" : "0");         return; }
-    if (!pin_valid(pin))    { sendf("ERR - pin %d out of range", pin); return; }
     if (!pin_is_input(pin)) { sendf("ERR - pin %d is not input", pin); return; }
 
     send(gpio_get(pin) ? "1" : "0");
@@ -90,8 +84,6 @@ static void handle_cmd_unlock(void) {
     send("OK");
 }
 
-/* ── точка входа ──────────────────────────────────────────────── */
-
 void commands_handle(char *line) {
     size_t len = strlen(line);
     if (len && line[len - 1] == '\r') line[--len] = 0;
@@ -106,8 +98,27 @@ void commands_handle(char *line) {
     if (!strcmp(cmd, "GET"))      { handle_cmd_get(n, a1);     return; }
     if (!strcmp(cmd, "BOOTLOAD")) { handle_cmd_bootload();     return; }
     if (!strcmp(cmd, "REBOOT"))   { handle_cmd_reboot();       return; }
-    if (!strcmp(cmd, "LOCK"))     { close_lock(false);         return; }
-    if (!strcmp(cmd, "UNLOCK"))   { open_lock(false);          return; }
+    if (!strcmp(cmd, "LOCK"))     { handle_cmd_lock();         return; }
+    if (!strcmp(cmd, "UNLOCK"))   { handle_cmd_unlock();       return; }
 
     sendf("ERR - unknown command: %s", cmd);
+}
+
+
+/* ── точка входа ──────────────────────────────────────────────── */
+
+void commands_poll(void) {
+    static char buf[MAX_CMD_LEN];
+    static int  pos = 0;
+
+    int c;
+    while ((c = getchar_timeout_us(0)) != PICO_ERROR_TIMEOUT) {
+        if (c == '\n') {
+            buf[pos] = 0;
+            commands_handle(buf);
+            pos = 0;
+        } else if (c != '\r' && pos < MAX_CMD_LEN - 1) {
+            buf[pos++] = (char)c;
+        }
+    }
 }
