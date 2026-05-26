@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+log() {
+    echo "$1" >&2
+}
+
+is_connected() {
+    bluetoothctl info "$BT_DEVICE_MAC" 2>/dev/null \
+        | awk '/Connected:/ {print $2}'
+}
+
+log "Started bt-autoconnect for $BT_DEVICE_MAC"
+
+while true; do
+    if [[ "$(is_connected)" != "yes" ]]; then
+        log "Not connected, trying to connect..."
+        if bluetoothctl connect "$BT_DEVICE_MAC"; then
+            sleep 2   # дать wireplumber увидеть sink
+            if XDG_RUNTIME_DIR=/run/pipewire wpctl set-volume @DEFAULT_AUDIO_SINK@ "$BT_VOLUME"; then
+                log "Volume level is set to $BT_VOLUME"
+            else
+                log "Error setting volume level. Error code - $?"
+            fi
+        else
+            log "Connection error. Error code - $?"
+        fi
+    fi
+    sleep "$BT_RECONNECT_INTERVAL"
+done

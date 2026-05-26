@@ -1,0 +1,12 @@
+[Unit]
+Description=Vibration Detection Handler
+After=rp-daemon.service
+
+[Service]
+Environment=XDG_RUNTIME_DIR=/run/pipewire
+ExecStart=/usr/local/bin/handle-vibration-sensor
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

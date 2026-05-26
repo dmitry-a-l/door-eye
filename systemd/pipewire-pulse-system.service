@@ -1,0 +1,16 @@
+[Unit]
+Description=PipeWire PulseAudio replacement (system)
+After=pipewire-system.service
+Requires=pipewire-system.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pipewire-pulse
+Restart=on-failure
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/pipewire
+Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+
+[Install]
+WantedBy=multi-user.target

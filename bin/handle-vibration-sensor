@@ -1,0 +1,23 @@
+#!/bin/bash
+
+POLL_INTERVAL=1
+
+log() {
+    echo "$1" >&2
+}
+
+handle_vibration_detected() {
+    log "Vibration detected, playing file"
+    XDG_RUNTIME_DIR=/run/pipewire paplay /usr/share/sounds/alsa/Front_Center.wav
+}
+
+while true; do
+    if pin200=$(/usr/local/bin/rp-cmd "GET 200"); then
+        if [[ "${pin200}" == "1" ]]; then
+            handle_vibration_detected
+        fi
+    else
+        log "Skipping unexpected rp-cmd output: ${pin200}"
+    fi
+    sleep "${POLL_INTERVAL}"
+done
