@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 source /etc/door-eye/door-station.env
 
-POLL_INTERVAL=1
+POLL_INTERVAL=0.2
 EVENT_WINDOW=2
 
 log() {
@@ -28,8 +28,7 @@ handle_authorized_card() {
   local name card
   name="$(echo "${event}" | jq -r '.name // "unknown"')"
   card="$(echo "${event}" | jq -r '.cardNo // "unknown"')"
-  log "ACCESS GRANTED | ${name} | card: ${card} | sending UNLOCK"
-  /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
+  log "ACCESS GRANTED | ${name} | card: ${card}"
 }
 
 handle_unauthorized_card() {
@@ -40,13 +39,10 @@ handle_unauthorized_card() {
 }
 
 handle_indoor_button() {
-  log "DOOR OPENED | изнутри с видеопанели | sending UNLOCK"
-  /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
+  log "DOOR OPENED | from indoor intercom"
 }
 
 log "Started"
-
-last_event_time=""
 
 while true; do
   response="$(query_events)"
@@ -64,24 +60,30 @@ while true; do
       event_time="$(echo "${event}" | jq -r '.time')"
       minor="$(echo "${event}" | jq -r '.minor')"
 
-      if [[ "${event_time}" == "${last_event_time}" ]]; then
-        continue
-      fi
-
       case "${minor}" in
         1)
-          last_event_time="${event_time}"
           handle_authorized_card "${event}"
           door_opened=1
           ;;
         9)
-          last_event_time="${event_time}"
           handle_unauthorized_card "${event}"
           ;;
         158)
-          last_event_time="${event_time}"
           handle_indoor_button
           door_opened=1
+          ;;
+        21)
+          log "Event 'door is opened (door lock)'"
+          door_opened=1
+          ;;
+        22)
+          log "Event 'door is closed (door lock)'"
+          ;;
+        26)
+          log "Event 'door is normally closed'"
+          ;;
+        92)
+          log "Door is unlocked in wrong state"
           ;;
         *)
           log "Unknown event code: ${minor}"
@@ -91,6 +93,8 @@ while true; do
   fi
 
   if [[ "${door_opened}" -eq 1 ]]; then
+    log "Sending UNLOCK command"
+    /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
     sleep 10
   else
     sleep "${POLL_INTERVAL}"
