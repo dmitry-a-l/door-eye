@@ -6,6 +6,6 @@
 #define VPIN100  100
 #define VPIN200  200
 
-bool get_vpin100(void);
+uint32_t get_vpin100_secs(void);
 bool get_vpin200(void);
 void poll_vpins(void);

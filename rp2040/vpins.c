@@ -19,13 +19,14 @@ static uint64_t pin28_cooldown_us  = 0;
 
 /* ── getters ──────────────────────────────────────────────────── */
 
-bool get_vpin100(void) {
-    if (vpin100_expires_us == 0) return false;
-    if (time_us_64() >= vpin100_expires_us) {
+uint32_t get_vpin100_secs(void) {
+    if (vpin100_expires_us == 0) return 0;
+    uint64_t now = time_us_64();
+    if (now >= vpin100_expires_us) {
         vpin100_expires_us = 0;
-        return false;
+        return 0;
     }
-    return true;
+    return (uint32_t)((vpin100_expires_us - now + 999999) / 1000000);
 }
 
 bool get_vpin200(void) {

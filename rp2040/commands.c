@@ -55,7 +55,7 @@ static void handle_cmd_set(int n, const char *a1, const char *a2) {
 static void handle_cmd_get(int n, const char *a1) {
     if (n != 2)             { send("ERR - GET requires: GET <pin>");   return; }
     int pin = atoi(a1);
-    if (pin == VPIN100)     { send(get_vpin100() ? "1" : "0");         return; }
+    if (pin == VPIN100)     { sendf("%u", get_vpin100_secs());          return; }
     if (pin == VPIN200)     { send(get_vpin200() ? "1" : "0");         return; }
     if (!pin_is_input(pin)) { sendf("ERR - pin %d is not input", pin); return; }
 
