@@ -79,16 +79,20 @@ wait_drm_presented() {
     return 1
 }
 
+clear_screen() {
+    TERM=linux clear > /dev/tty1
+}
+
 turn_screen_on() {
     local attempt
     for (( attempt = 1; attempt <= TURN_ON_MAX_ATTEMPTS; attempt++ )); do
         set_connector on
+        clear_screen
         if wait_hdmi_connected && wait_drm_presented && wait_hdmi_stable; then
             screen_on=1
             return 0
         fi
         log "turn_screen_on attempt ${attempt} failed, retrying"
-        set_connector off
         sleep 1
     done
     log "ERROR: turn_screen_on gave up after ${TURN_ON_MAX_ATTEMPTS} attempts"
@@ -98,7 +102,7 @@ turn_screen_on() {
 turn_screen_off() {
     sleep "${HDMI_DISCONNECT_SETTLE}"
     set_connector off
-    TERM=linux clear > /dev/tty1
+    clear_screen
     screen_on=0
 }
 
@@ -122,7 +126,7 @@ MOTION_CLEAR_THRESHOLD=5
 
 log "Started"
 
-if is_hdmi_connected; then
+if is_hdmi_connected && systemctl is-active --quiet show-door-eye; then
     screen_on=1
 else
     screen_on=0
