@@ -44,10 +44,6 @@ void close_lock(bool silent) {
 }
 
 void open_lock(bool silent) {
-    if (!gpio_get(PIN_SENSOR_DOOR_CLOSE)) {
-        if (!silent) send("ERR - door is open");
-        return;
-    }
     if (gpio_get(PIN_SENSOR_LOCK_OPEN)) {
         if (!silent) send("ERR - lock already open");
         return;
