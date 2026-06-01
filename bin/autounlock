@@ -83,6 +83,9 @@ while true; do
           handle_indoor_button
           door_opened=1
           ;;
+        *)
+          log "Unknown event code: ${minor}"
+          ;;
       esac
     done < <(echo "${response}" | jq -c '.AcsEvent.InfoList[]')
   fi
