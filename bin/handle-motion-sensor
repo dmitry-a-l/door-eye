@@ -118,6 +118,8 @@ handle_motion_cleared() {
     turn_screen_off
 }
 
+MOTION_CLEAR_THRESHOLD=5
+
 log "Started"
 
 if is_hdmi_connected; then
@@ -126,12 +128,20 @@ else
     screen_on=0
 fi
 
+clear_count=0
+
 while true; do
     if pin100=$(/usr/local/bin/rp-cmd "GET 100" 2>/dev/null); then
-        if [[ "${pin100}" == "1" && "${screen_on}" != "1" ]]; then
-            handle_motion_detected
-        elif [[ "${pin100}" == "0" && "${screen_on}" != "0" ]]; then
-            handle_motion_cleared
+        if [[ "${pin100}" == "1" ]]; then
+            clear_count=0
+            if [[ "${screen_on}" != "1" ]]; then
+                handle_motion_detected
+            fi
+        elif [[ "${pin100}" == "0" ]]; then
+            clear_count=$(( clear_count + 1 ))
+            if [[ "${screen_on}" != "0" && "${clear_count}" -ge "${MOTION_CLEAR_THRESHOLD}" ]]; then
+                handle_motion_cleared
+            fi
         fi
     else
         log "Skipping unexpected rp-cmd output: ${pin100}"
