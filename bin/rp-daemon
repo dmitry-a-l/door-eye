@@ -41,9 +41,16 @@ while true; do
         if read -t "$RP_TIMEOUT" response <&3; then
             response="${response%$'\r'}"
         else
-            response="ERR timeout"
-            log "ERR - no response from RP2040 for cmd: $cmd"
+            log "WARN - no response from RP2040 for cmd: $cmd, retrying"
             exec 3<"$RP_PORT" 4>"$RP_PORT"
+            printf '%s\n' "$cmd" >&4
+            if read -t "$RP_TIMEOUT" response <&3; then
+                response="${response%$'\r'}"
+            else
+                response="ERR timeout"
+                log "ERR - no response from RP2040 for cmd: $cmd after retry"
+                exec 3<"$RP_PORT" 4>"$RP_PORT"
+            fi
         fi
 
         log "response to pid $pid: $response"
