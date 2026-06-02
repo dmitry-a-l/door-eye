@@ -166,7 +166,7 @@ update_osd() {
   osd="${current_time}\n\n${current_weather}\n"
   osd="${osd}\n\n\n\n\n\n\n\n\n\n\n"
   osd="${osd}\n${forecast_2h}\n${forecast_8h}\n"
-  osd="${osd}\n\n\n\n" 
+  osd="${osd}\n\n\n\n"
   echo "set osd-msg1 '${osd}'" | socat - "${SOCK_PATH}"
 }
 
@@ -190,16 +190,13 @@ check_json_ready() {
 wait_socket_ready
 check_json_ready
 
-old_time=""
+current_weather="$(get_current_weather)"
+forecast_2h="2h $(get_forecast_weather 4)"
+forecast_8h="8h $(get_forecast_weather 32)"
+log "Built OSD: ${current_weather}"
+
 for ((;;)); do
   time="$(get_time)"
-  if [[ "${time}" != "${old_time}" ]]; then
-    current_weather="$(get_current_weather)"
-    forecast_2h="2h $(get_forecast_weather 4)"
-    forecast_8h="8h $(get_forecast_weather 32)"
-    log "Built OSD: ${current_weather}"
-    old_time="${time}"
-  fi
   update_osd "${time}" "${current_weather}" "${forecast_2h}" "${forecast_8h}"
   sleep 1
   update_osd "${time//:/ }" "${current_weather}" "${forecast_2h}" "${forecast_8h}"
