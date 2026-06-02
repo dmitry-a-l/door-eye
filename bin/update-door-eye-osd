@@ -170,18 +170,28 @@ update_osd() {
   echo "set osd-msg1 '${osd}'" | socat - "${SOCK_PATH}"
 }
 
+wait_socket_ready() {
+  log "Waiting for socket ${SOCK_PATH}"
+  local deadline=$(( EPOCHSECONDS + 1 ))
+  while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
+    if echo "" | socat -T 0.1 - "UNIX-CONNECT:${SOCK_PATH}" &>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  log "Socket ${SOCK_PATH} not ready"
+  return 1
+}
+
+check_json_ready() {
+  [[ -s "${JSON_PATH}" ]] || { log "No weather data at ${JSON_PATH}"; return 1; }
+}
+
+wait_socket_ready
+check_json_ready
+
 old_time=""
 for ((;;)); do
-  if [[ ! -S "${SOCK_PATH}" ]]; then
-    log "There is no ${SOCK_PATH}"
-    sleep 1
-    continue
-  fi
-  if [[ ! -s "${JSON_PATH}" ]]; then
-    log "There is no ${JSON_PATH} or it is empty"
-    sleep 1
-    continue
-  fi
   time="$(get_time)"
   if [[ "${time}" != "${old_time}" ]]; then
     current_weather="$(get_current_weather)"

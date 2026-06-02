@@ -3,10 +3,10 @@ set -eu
 
 POLL_INTERVAL=0.2
 TURN_ON_FAIL_RETRY=1
-MOTION_CLEAR_THRESHOLD=3
-HDMI_CONNECT_TIMEOUT=10
-HDMI_DISCONNECT_SETTLE=0.3
+HDMI_CONNECT_TIMEOUT=3
 DRM_WAIT_TIMEOUT=3
+HDMI_DISCONNECT_SETTLE=0.3
+HDMI_CONNECT_SETTLE=1
 
 log() {
     echo "$1" >&2
@@ -23,9 +23,11 @@ is_hdmi_connected() {
 }
 
 wait_hdmi_connected() {
+    log "Waiting for HDMI connected"
     local deadline=$(( EPOCHSECONDS + HDMI_CONNECT_TIMEOUT ))
     while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
         if is_hdmi_connected; then
+            log "HDMI connected"
             return 0
         fi
         sleep 0.1
@@ -34,11 +36,12 @@ wait_hdmi_connected() {
     return 1
 }
 
-
 wait_drm_presented() {
+    log "Waiting for DRM node"
     local deadline=$(( EPOCHSECONDS + DRM_WAIT_TIMEOUT ))
     while [[ ${EPOCHSECONDS} -lt ${deadline} ]]; do
         if [[ -e "${DRM_NODE}" ]]; then
+            log "DRM node ready"
             return 0
         fi
         sleep 0.1
@@ -56,6 +59,7 @@ turn_screen_on() {
     clear_screen
     wait_hdmi_connected
     wait_drm_presented
+    sleep "${HDMI_CONNECT_SETTLE}"
 }
 
 turn_screen_off() {
@@ -67,14 +71,13 @@ turn_screen_off() {
 handle_motion_detected() {
     log "Motion detected"
     turn_screen_on
-    systemctl start show-door-eye
-    systemctl restart update-door-eye-osd
+    systemctl start show-door-screen
 }
 
 handle_motion_cleared() {
     log "Motion cleared"
     clear_screen
-    systemctl stop show-door-eye
+    systemctl stop show-door-screen
     turn_screen_off
 }
 
@@ -83,12 +86,10 @@ log "Started"
 handle_motion_cleared
 
 motion_active=0
-clear_count=0
 
 while true; do
     if secs=$(/usr/local/bin/rp-cmd "GET 100"); then
         if (( secs > 0 )); then
-            clear_count=0
             if (( motion_active == 0 )); then
                 secs="$(( secs + 1 ))"
                 if ! handle_motion_detected; then
@@ -101,8 +102,7 @@ while true; do
             log "Waiting ${secs}s to next motion check"
             sleep "${secs}"
         else
-            clear_count=$(( clear_count + 1 ))
-            if (( motion_active == 1 && clear_count >= MOTION_CLEAR_THRESHOLD )); then
+            if (( motion_active == 1 )); then
                 handle_motion_cleared
                 motion_active=0
             fi

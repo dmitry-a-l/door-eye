@@ -25,10 +25,17 @@ rsync -ae ssh etc/door-eye/*.env $HOST:/etc/door-eye/
 rsync -ae ssh bin/* $HOST:/usr/local/bin/
 rsync -ae ssh systemd/* $HOST:/etc/systemd/system/
 
+UNMANAGED_UNITS="show-door-screen.service update-door-eye-osd.service"
+
 cmd="systemctl daemon-reload"
 for unit in `ls systemd`; do
-  cmd="${cmd} && systemctl enable ${unit}"
-  cmd="${cmd} && systemctl restart ${unit}"
+  if [[ " ${UNMANAGED_UNITS} " == *" ${unit} "* ]]; then
+    cmd="${cmd} && systemctl disable ${unit} || true"
+    cmd="${cmd} && systemctl stop ${unit} || true"
+  else
+    cmd="${cmd} && systemctl enable ${unit}"
+    cmd="${cmd} && systemctl restart ${unit}"
+  fi
 done
 
 remote_run "${HOST}" "${cmd}"

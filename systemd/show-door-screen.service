@@ -1,16 +1,14 @@
 [Unit]
 Description=Run MPV player shows door eye
 After=network.target
+Wants=update-door-eye-osd.service
 
 [Service]
 Environment=XDG_RUNTIME_DIR=/run
 EnvironmentFile=/etc/door-eye/app.env
 EnvironmentFile=/etc/door-eye/mpv.env
 EnvironmentFile=/etc/door-eye/screen.env
-ExecStart=/usr/local/bin/show-door-eye
+TTYPath=/dev/tty1
+StandardInput=tty
+ExecStart=/usr/local/bin/show-door-screen
 RuntimeMaxSec=1d
-RestartSec=5
-Restart=always
-
-[Install]
-WantedBy=multi-user.target

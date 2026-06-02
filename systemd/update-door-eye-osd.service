@@ -1,14 +1,11 @@
 [Unit]
 Description=Update Door Eye OSD
-After=show-door-eye.service
-Requires=show-door-eye.service
+BindsTo=show-door-screen.service
+After=show-door-screen.service
 
 [Service]
 EnvironmentFile=/etc/door-eye/app.env
 EnvironmentFile=/etc/door-eye/open-meteo.env
 ExecStart=/usr/local/bin/update-door-eye-osd
-RestartSec=5
+RestartSec=1
 Restart=always
-
-[Install]
-WantedBy=multi-user.target
