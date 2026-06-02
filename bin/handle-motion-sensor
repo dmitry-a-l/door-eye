@@ -3,6 +3,7 @@ set -eu
 
 POLL_INTERVAL=0.2
 TURN_ON_FAIL_RETRY=1
+MOTION_CLEAR_THRESHOLD=3
 HDMI_CONNECT_TIMEOUT=10
 HDMI_DISCONNECT_SETTLE=0.3
 DRM_WAIT_TIMEOUT=3
@@ -55,14 +56,12 @@ turn_screen_on() {
     clear_screen
     wait_hdmi_connected
     wait_drm_presented
-    screen_on=1
 }
 
 turn_screen_off() {
     sleep "${HDMI_DISCONNECT_SETTLE}"
     set_connector off
     clear_screen
-    screen_on=0
 }
 
 handle_motion_detected() {
@@ -83,22 +82,29 @@ log "Started"
 
 handle_motion_cleared
 
+motion_active=0
+clear_count=0
+
 while true; do
-    if secs=$(/usr/local/bin/rp-cmd "GET 100" 2>/dev/null); then
+    if secs=$(/usr/local/bin/rp-cmd "GET 100"); then
         if (( secs > 0 )); then
-            secs="$(( secs + 1 ))"
-            if [[ "${screen_on}" != "1" ]]; then
+            clear_count=0
+            if (( motion_active == 0 )); then
+                secs="$(( secs + 1 ))"
                 if ! handle_motion_detected; then
                     log "Motion detected but screen failed to turn on, retrying next cycle"
                     sleep "${TURN_ON_FAIL_RETRY}"
                     continue
                 fi
+                motion_active=1
             fi
             log "Waiting ${secs}s to next motion check"
             sleep "${secs}"
         else
-            if [[ "${screen_on}" != "0" ]]; then
+            clear_count=$(( clear_count + 1 ))
+            if (( motion_active == 1 && clear_count >= MOTION_CLEAR_THRESHOLD )); then
                 handle_motion_cleared
+                motion_active=0
             fi
             sleep "${POLL_INTERVAL}"
         fi
