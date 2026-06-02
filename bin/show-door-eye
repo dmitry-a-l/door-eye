@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+[[ "$(cat "${HDMI_CTL_PATH}")" == "connected" ]] || { echo "Connector is disconnected, refusing to start" >&2; exit 1; }
+
 mkdir -p ${SOCK_PATH%/*}
 
 /usr/bin/mpv --quiet \
              --no-config \
+             --vo=gpu \
              --cache=no \
              --hr-seek=no \
              --profile=low-latency  \
