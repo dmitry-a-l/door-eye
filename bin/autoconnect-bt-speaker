@@ -2,58 +2,68 @@
 
 set -Eeuo pipefail
 
+MAC_UNDERSCORE="${BT_DEVICE_MAC//:/_}"
+
 log() {
-    echo "$1" >&2
+  echo "$*" >&2
 }
 
-is_connected() {
-    bluetoothctl info "$BT_DEVICE_MAC" 2>/dev/null \
-        | awk '/Connected:/ {print $2}'
+# Готовность определяем по наличию A2DP-sink в PipeWire, а НЕ по флагу
+# Connected в BlueZ: после самозасыпания колонки BlueZ может держать
+# фантомный Connected=yes без живого транспорта.
+sink_ready() {
+  pw-cli ls Node 2>/dev/null | grep -q "bluez_output.${MAC_UNDERSCORE}"
 }
 
-# Ждём, пока PipeWire/WirePlumber поднимут bluez5-стек и зарегистрируют
-# A2DP-endpoint в BlueZ. Без этого connect падает с
-# br-connection-profile-unavailable.
-ensure_pipewire_is_ready() {
-    local deadline=$(( EPOCHSECONDS + 60 ))
-    log "Waiting for PipeWire bluez5 stack..."
-    while (( EPOCHSECONDS < deadline )); do
-        if wpctl status >/dev/null 2>&1; then
-            log "PipeWire is ready"
-            sleep 1
-            return 0
-        fi
-        sleep 1
-    done
-    log "Timeout waiting for PipeWire"
-    exit 1
+wait_sink() {
+  local wait_sec="${1}"
+  local deadline=$(( EPOCHSECONDS + wait_sec ))
+  while (( EPOCHSECONDS < deadline )); do
+    sink_ready && return 0
+    sleep 0.5
+  done
+  return 1
 }
 
-apply_volume() {
-    if wpctl set-volume @DEFAULT_AUDIO_SINK@ "$BT_VOLUME" 2>/dev/null; then
-        log "Volume set to $BT_VOLUME"
-    else
-        log "Error setting volume level. Error code - $?"
-        exit 1
-    fi
+connect_speaker() {
+  timeout "$BT_CONNECT_TIMEOUT" \
+    bluetoothctl connect "$BT_DEVICE_MAC" >/dev/null 2>&1
 }
 
-log "Started bt-autoconnect for $BT_DEVICE_MAC"
+# Сброс фантомного линка: обычный disconnect на мёртвом линке висит,
+# поэтому передёргиваем питание контроллера — это гарантированно чистит
+# зависшее состояние, после чего connect поднимает транспорт заново.
+recover_link() {
+  log "Recovering link via adapter power-cycle. Powering off"
+  bluetoothctl power off
+  sleep 2
+  log "Recovering link via adapter power-cycle. Powering on"
+  bluetoothctl power on
+  sleep 2
+}
 
-ensure_pipewire_is_ready
+reconnect() {
+  log "Sink missing, reconnecting"
+  if connect_speaker; then
+    wait_sink 5 
+    log "Reconnected"
+  else
+    log "Still no sink — likely phantom, recovering"
+    recover_link
+    connect_speaker
+    wait_sink "$BT_SINK_WAIT"
+    log "Reconnected after recovery"
+  fi
+}
+
+log "Started autoconnect-bt-speaker for $BT_DEVICE_MAC"
 
 while true; do
-    if [[ "$(is_connected)" == "yes" ]]; then
-        sleep "$BT_RECONNECT_INTERVAL"
-        continue
-    fi
-
-    log "Not connected, trying to connect"
-    if bluetoothctl connect "$BT_DEVICE_MAC" >/dev/null 2>&1; then
-        log "Connected"
-        sleep 2
-        apply_volume
-    fi
-
+  if sink_ready; then
     sleep "$BT_RECONNECT_INTERVAL"
+    continue
+  fi
+  if ! reconnect; then
+    sleep "$BT_RETRY_INTERVAL"
+  fi
 done
