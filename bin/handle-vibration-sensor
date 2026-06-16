@@ -1,6 +1,7 @@
 #!/bin/bash
 
 POLL_INTERVAL=1
+COOLDOWN=3
 
 log() {
     echo "$1" >&2
@@ -9,7 +10,7 @@ log() {
 handle_vibration_detected() {
     log "Vibration detected, playing file"
     XDG_RUNTIME_DIR=/run/pipewire pw-play /usr/local/share/sounds/neighbour.wav
-    pw-play
+    sleep "${COOLDOWN}"
 }
 
 while true; do

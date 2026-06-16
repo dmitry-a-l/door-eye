@@ -11,8 +11,8 @@ static uint64_t vpin100_expires_us = 0;
 
 /* ── vpin200: PIN28, инверсия, 5 сек + 5 сек cooldown ───────── */
 
-#define VPIN200_DURATION_MS   5000
-#define VPIN200_COOLDOWN_MS   5000
+#define VPIN200_DURATION_MS   1000
+#define VPIN200_COOLDOWN_MS   2000
 
 static uint64_t vpin200_expires_us = 0;
 static uint64_t pin28_cooldown_us  = 0;

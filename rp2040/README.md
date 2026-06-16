@@ -60,6 +60,12 @@ PIN | Sensor       | Wire color
 
 PIN: 26
 
+Virtual pin: `GET 100` — returns seconds remaining on the latch (0 if inactive).
+Latches for **60 s** after any motion pulse; re-triggers extend the window.
+
 ## Remote relay
 
-PIN: 28
+PIN: 28 (active-low)
+
+Virtual pin: `GET 200` — returns `1` while active, `0` otherwise.
+Latches for **1 s** on signal; **2 s** cooldown before re-triggering.
