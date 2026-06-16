@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -Eeuo pipefail
 
 log() {
@@ -10,21 +11,49 @@ is_connected() {
         | awk '/Connected:/ {print $2}'
 }
 
+# Ждём, пока PipeWire/WirePlumber поднимут bluez5-стек и зарегистрируют
+# A2DP-endpoint в BlueZ. Без этого connect падает с
+# br-connection-profile-unavailable.
+ensure_pipewire_is_ready() {
+    local deadline=$(( EPOCHSECONDS + 60 ))
+    log "Waiting for PipeWire bluez5 stack..."
+    while (( EPOCHSECONDS < deadline )); do
+        if wpctl status >/dev/null 2>&1; then
+            log "PipeWire is ready"
+            sleep 1
+            return 0
+        fi
+        sleep 1
+    done
+    log "Timeout waiting for PipeWire"
+    exit 1
+}
+
+apply_volume() {
+    if wpctl set-volume @DEFAULT_AUDIO_SINK@ "$BT_VOLUME" 2>/dev/null; then
+        log "Volume set to $BT_VOLUME"
+    else
+        log "Error setting volume level. Error code - $?"
+        exit 1
+    fi
+}
+
 log "Started bt-autoconnect for $BT_DEVICE_MAC"
 
+ensure_pipewire_is_ready
+
 while true; do
-    if [[ "$(is_connected)" != "yes" ]]; then
-        log "Not connected, trying to connect..."
-        if bluetoothctl connect "$BT_DEVICE_MAC"; then
-            sleep 2   # дать wireplumber увидеть sink
-            if XDG_RUNTIME_DIR=/run/pipewire wpctl set-volume @DEFAULT_AUDIO_SINK@ "$BT_VOLUME"; then
-                log "Volume level is set to $BT_VOLUME"
-            else
-                log "Error setting volume level. Error code - $?"
-            fi
-        else
-            log "Connection error. Error code - $?"
-        fi
+    if [[ "$(is_connected)" == "yes" ]]; then
+        sleep "$BT_RECONNECT_INTERVAL"
+        continue
     fi
+
+    log "Not connected, trying to connect"
+    if bluetoothctl connect "$BT_DEVICE_MAC" >/dev/null 2>&1; then
+        log "Connected"
+        sleep 2
+        apply_volume
+    fi
+
     sleep "$BT_RECONNECT_INTERVAL"
 done

@@ -1,13 +1,13 @@
 [Unit]
 Description=Bluetooth speaker autoconnect
-After=bluetooth.service pipewire-system.service
-Requires=bluetooth.service
+After=bluetooth.service pipewire-system.service wireplumber-system.service
+Requires=bluetooth.service wireplumber-system.service
 
 [Service]
 EnvironmentFile=/etc/door-eye/bt-speaker.env
 ExecStart=/usr/local/bin/autoconnect-bt-speaker
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target

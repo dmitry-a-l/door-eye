@@ -18,24 +18,25 @@ remote_run() {
 
 source etc/door-eye/app.env
 
-cmd="mkdir -p /etc/door-eye && mkdir -p ${JSON_PATH%/*} && apt-get install -y socat mpv rsync"
+PACKAGES="socat mpv rsync \
+pipewire pipewire-bin pipewire-audio pipewire-pulse wireplumber \
+libspa-0.2-bluetooth bluez"
+
+cmd="mkdir -p /etc/door-eye"
+cmd="${cmd} && mkdir -p ${JSON_PATH%/*}"
+cmd="${cmd} && mkdir -p /etc/wireplumber/wireplumber.conf.d"
+cmd="${cmd} && apt-get install -y ${PACKAGES}"
 remote_run "${HOST}" "${cmd}"
 
 rsync -ae ssh etc/door-eye/*.env $HOST:/etc/door-eye/
+rsync -ae ssh etc/wireplumber/wireplumber.conf.d/* $HOST:/etc/wireplumber/wireplumber.conf.d/
 rsync -ae ssh bin/* $HOST:/usr/local/bin/
 rsync -ae ssh systemd/* $HOST:/etc/systemd/system/
 
-UNMANAGED_UNITS="show-door-screen.service update-door-eye-osd.service"
-
 cmd="systemctl daemon-reload"
 for unit in `ls systemd`; do
-  if [[ " ${UNMANAGED_UNITS} " == *" ${unit} "* ]]; then
-    cmd="${cmd} && systemctl disable ${unit} || true"
-    cmd="${cmd} && systemctl stop ${unit} || true"
-  else
-    cmd="${cmd} && systemctl enable ${unit}"
-    cmd="${cmd} && systemctl restart ${unit}"
-  fi
+  cmd="${cmd} && systemctl enable ${unit}"
+  cmd="${cmd} && systemctl restart ${unit}"
 done
 
 remote_run "${HOST}" "${cmd}"

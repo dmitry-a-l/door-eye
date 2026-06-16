@@ -8,7 +8,8 @@ log() {
 
 handle_vibration_detected() {
     log "Vibration detected, playing file"
-    XDG_RUNTIME_DIR=/run/pipewire paplay /usr/share/sounds/alsa/Front_Center.wav
+    XDG_RUNTIME_DIR=/run/pipewire pw-play /usr/local/share/sounds/neighbour.wav
+    pw-play
 }
 
 while true; do

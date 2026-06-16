@@ -13,8 +13,8 @@ log() {
   echo "${msg}" >&2
 }
 
-log "Requesting weather data from OpenMeteo API"
-if DATA="$(curl -fs "${URL}")"; then
+log "Requesting weather data from OpenMeteo API - ${URL}"
+if DATA="$(curl -fs --connect-timeout 5 "${URL}")"; then
   mkdir -p ${JSON_PATH%/*}
   echo "${DATA}" > "${JSON_PATH}.tmp"
   mv "${JSON_PATH}.tmp" "${JSON_PATH}"

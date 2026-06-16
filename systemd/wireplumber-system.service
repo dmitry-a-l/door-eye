@@ -1,6 +1,6 @@
 [Unit]
 Description=WirePlumber session manager (system)
-After=pipewire-system.service
+After=pipewire-system.service dbus.service
 Requires=pipewire-system.service
 
 [Service]

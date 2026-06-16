@@ -9,6 +9,7 @@ ExecStart=/usr/bin/pipewire
 Restart=on-failure
 RestartSec=5
 Environment=XDG_RUNTIME_DIR=/run/pipewire
+Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
 RuntimeDirectory=pipewire
 RuntimeDirectoryPreserve=yes
