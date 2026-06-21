@@ -5,7 +5,8 @@ set -Eeuo pipefail
 source /etc/door-eye/door-station.env
 
 POLL_INTERVAL=0.2
-EVENT_WINDOW=2
+EVENT_WINDOW=5
+COOLDOWN_INTERVAL=10
 
 log() {
   echo "$*" >&2
@@ -14,12 +15,11 @@ log() {
 query_events() {
   local start end
   start="$(date -u -d "${EVENT_WINDOW} seconds ago" '+%Y-%m-%dT%H:%M:%SZ')"
-  end="$(date -u -d "${EVENT_WINDOW} seconds" '+%Y-%m-%dT%H:%M:%SZ')"
 
   curl -s --digest -u "${HIK_USER}:${HIK_PASSWORD}" \
     -X POST \
     -H "Content-Type: application/json" \
-    -d "{\"AcsEventCond\":{\"searchID\":\"1\",\"searchResultPosition\":0,\"maxResults\":10,\"major\":5,\"minor\":0,\"startTime\":\"${start}\",\"endTime\":\"${end}\"}}" \
+    -d "{\"AcsEventCond\":{\"searchID\":\"1\",\"searchResultPosition\":0,\"maxResults\":10,\"major\":5,\"minor\":0,\"startTime\":\"${start}\"}}" \
     "http://${HIK_HOST}/ISAPI/AccessControl/AcsEvent?format=json"
 }
 
@@ -42,6 +42,12 @@ handle_indoor_button() {
   log "DOOR OPENED | from indoor intercom"
 }
 
+unlock() {
+  log "Sending UNLOCK command"
+  /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
+  sleep "${COOLDOWN_INTERVAL}"
+}
+
 log "Started"
 
 while true; do
@@ -52,38 +58,45 @@ while true; do
     continue
   fi
 
-  matches="$(echo "${response}" | jq -r '.AcsEvent.numOfMatches // 0')"
-  door_opened=0
+  matches="$(jq -r '.AcsEvent.numOfMatches // 0' <<< "${response}")"
+
+  need_open_door=0
 
   if [[ "${matches}" -gt 0 ]]; then
+    log "Handling ${matches} events"
+
     while IFS= read -r event; do
-      event_time="$(echo "${event}" | jq -r '.time')"
-      minor="$(echo "${event}" | jq -r '.minor')"
+      minor="$(jq -r '.minor' <<< "${event}")"
 
       case "${minor}" in
         1)
           handle_authorized_card "${event}"
-          door_opened=1
+          need_open_door=1
           ;;
         9)
           handle_unauthorized_card "${event}"
           ;;
         158)
           handle_indoor_button
-          door_opened=1
+          need_open_door=1
           ;;
         21)
           log "Event 'door is opened (door lock)'"
-          door_opened=1
+          need_open_door=1
+          ;;
+        92)
+          log "Door is unlocked in wrong state"
+          need_open_door=1
+          ;;
+        216|214)
+          log "Door is unlocked in wrong state by indoor button"
+          need_open_door=1
           ;;
         22)
           log "Event 'door is closed (door lock)'"
           ;;
         26)
           log "Event 'door is normally closed'"
-          ;;
-        92)
-          log "Door is unlocked in wrong state"
           ;;
         *)
           log "Unknown event code: ${minor}"
@@ -92,10 +105,8 @@ while true; do
     done < <(echo "${response}" | jq -c '.AcsEvent.InfoList[]')
   fi
 
-  if [[ "${door_opened}" -eq 1 ]]; then
-    log "Sending UNLOCK command"
-    /usr/local/bin/rp-cmd "UNLOCK" || log "ERR failed to send UNLOCK"
-    sleep 10
+  if [[ "${need_open_door}" -eq 1 ]]; then
+    unlock
   else
     sleep "${POLL_INTERVAL}"
   fi
