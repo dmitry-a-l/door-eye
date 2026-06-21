@@ -16,7 +16,7 @@
 
 #define MAX_CMD_LEN  64
 
-/* ── валидация пинов ──────────────────────────────────────────── */
+/* ── pin validation ───────────────────────────────────────────── */
 
 extern const pin_config_t PIN_CONFIG[];
 extern const int          PIN_CONFIG_COUNT;
@@ -39,7 +39,7 @@ static bool pin_is_input(int pin) {
     return false;
 }
 
-/* ── обработчики команд ───────────────────────────────────────── */
+/* ── command handlers ─────────────────────────────────────────── */
 
 static void handle_cmd_set(int n, const char *a1, const char *a2) {
     if (n != 3)               { send("ERR - SET requires: SET <pin> <0|1>"); return; }
@@ -89,6 +89,24 @@ void commands_handle(char *line) {
     if (len && line[len - 1] == '\r') line[--len] = 0;
     if (!len) return;
 
+    /* Optional leading correlation tag "@<id> ...". Remember it so the reply
+     * carries the same tag, then advance past it to the command. */
+    if (line[0] == '@') {
+        char tag[16];
+        int  i = 0;
+        while (line[i] && line[i] != ' ' && i < (int)sizeof(tag) - 1) {
+            tag[i] = line[i];
+            i++;
+        }
+        tag[i] = 0;
+        set_reply_tag(tag);
+        while (line[i] == ' ') i++;
+        line += i;
+        if (!*line) return;
+    } else {
+        set_reply_tag(NULL);
+    }
+
     char cmd[16], a1[16], a2[16];
     a1[0] = a2[0] = 0;
     int n = sscanf(line, "%15s %15s %15s", cmd, a1, a2);
@@ -105,7 +123,7 @@ void commands_handle(char *line) {
 }
 
 
-/* ── точка входа ──────────────────────────────────────────────── */
+/* ── entry point ──────────────────────────────────────────────── */
 
 void commands_poll(void) {
     static char buf[MAX_CMD_LEN];

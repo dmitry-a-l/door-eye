@@ -24,8 +24,35 @@ log "Started on port $RP_PORT"
 CLEANUP_INTERVAL=60
 last_cleanup="$EPOCHSECONDS"
 
+# Counter for the request/response correlation tag.
+seq=0
+
+# Sends "$tag $cmd" to the RP2040 and reads lines from the port, dropping
+# everything not marked with our tag (unsolicited messages, stale replies from
+# previous commands). Returns the untagged response in the RESPONSE variable.
+send_and_read() {
+    local tag="$1" cmd="$2" line
+    local deadline=$(( EPOCHSECONDS + RP_TIMEOUT ))
+
+    printf '%s %s\n' "$tag" "$cmd" >&4
+
+    while (( EPOCHSECONDS <= deadline )); do
+        if read -t "$RP_TIMEOUT" line <&3; then
+            line="${line%$'\r'}"
+            case "$line" in
+                "$tag "*) RESPONSE="${line#"$tag" }"; return 0 ;;
+                "$tag")   RESPONSE="";                return 0 ;;
+                *)        log "drop stale/unsolicited: $line" ;;
+            esac
+        else
+            return 1
+        fi
+    done
+    return 1
+}
+
 while true; do
-    # чистка устаревших файлов
+    # clean up stale result files
     if [[ $(( EPOCHSECONDS - last_cleanup )) -ge $CLEANUP_INTERVAL ]]; then
         find "$RP_RESULT_DIR" -maxdepth 1 -type f -mmin +1 -delete
         last_cleanup=$EPOCHSECONDS
@@ -36,19 +63,21 @@ while true; do
         cmd="${line#* }"
         log "cmd from pid $pid: $cmd"
 
-        printf '%s\n' "$cmd" >&4
+        seq=$(( (seq + 1) % 1000000 ))
+        tag="@$seq"
 
-        if read -t "$RP_TIMEOUT" response <&3; then
-            response="${response%$'\r'}"
+        if send_and_read "$tag" "$cmd"; then
+            response="$RESPONSE"
         else
-            log "WARN - no response from RP2040 for cmd: $cmd, retrying"
+            log "WARN - no tagged response from RP2040 for cmd: $cmd, retrying"
             exec 3<"$RP_PORT" 4>"$RP_PORT"
-            printf '%s\n' "$cmd" >&4
-            if read -t "$RP_TIMEOUT" response <&3; then
-                response="${response%$'\r'}"
+            seq=$(( (seq + 1) % 1000000 ))
+            tag="@$seq"
+            if send_and_read "$tag" "$cmd"; then
+                response="$RESPONSE"
             else
                 response="ERR timeout"
-                log "ERR - no response from RP2040 for cmd: $cmd after retry"
+                log "ERR - no tagged response from RP2040 for cmd: $cmd after retry"
                 exec 3<"$RP_PORT" 4>"$RP_PORT"
             fi
         fi

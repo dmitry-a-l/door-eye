@@ -11,6 +11,18 @@ Upload firmware from Radxa Dragon
 
     upload-firmware.sh
 
+# Serial protocol
+
+Commands are line-based over USB serial. To correlate a reply with its request
+(and ignore unsolicited messages like `READY` or stale replies after a timeout),
+the host may prefix a command with a correlation tag `@<id>`:
+
+    @42 GET 8   →   @42 1
+
+The firmware echoes the same tag on every line of the response. Commands without
+a tag are answered without one. `rp-daemon` adds and verifies these tags
+automatically; `rp-cmd` callers don't need to.
+
 # PINs description
 
 ## Actions
@@ -31,12 +43,11 @@ PIN | Action
   5 | beep the buzzer
 
 
-### Door lock handle
+### Door action handle
 
 PIN | Action  | Wire color
 ----+---------+-----------
-  7 | unlock  | blue
-  8 | lock    | green
+  8 | action    | green
 
 
 ## Sensors
