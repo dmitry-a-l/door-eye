@@ -17,6 +17,7 @@ add_executable(rp2040_gpio_bridge
     light.c
     io.c
     autolock.c
+    button.c
 )
 
 target_link_libraries(rp2040_gpio_bridge

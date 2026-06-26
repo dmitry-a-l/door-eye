@@ -11,8 +11,11 @@
 #define AUTOLOCK_AFTER_LOCK_OPEN_MS    30000
 #define AUTOLOCK_WARN_BEFORE_MS        3000
 
-static uint32_t autolock_at = 0;   /* абсолютное время автозакрытия, 0 = не запланировано */
+static uint32_t autolock_at = 0;   /* absolute auto-close time, 0 = not scheduled */
 static bool     warned      = false;
+static bool     manual_hold = false;  /* sticky timer set via autolock_set() by a button
+                                         long-press; it survives door open/close and the
+                                         automatic 10s/30s rescheduling until it expires */
 
 static void buzzer_warn(void) {
     for (int i = 0; i < 3; i++) {
@@ -31,6 +34,18 @@ static void schedule_autolock(uint32_t now, uint32_t delay_ms) {
 static void cancel_autolock(void) {
     autolock_at = 0;
     warned      = false;
+    manual_hold = false;
+}
+
+void autolock_set(uint32_t delay_ms) {
+    schedule_autolock(to_ms_since_boot(get_absolute_time()), delay_ms);
+    manual_hold = true;
+}
+
+uint32_t autolock_remaining_ms(void) {
+    if (autolock_at == 0) return 0;
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    return now >= autolock_at ? 0 : autolock_at - now;
 }
 
 void autolock_poll(void) {
@@ -42,7 +57,7 @@ void autolock_poll(void) {
     static bool last_lock_open   = false;
     static bool initialized      = false;
 
-    /* первый тик — инициализация без срабатывания */
+    /* first tick — initialize without firing */
     if (!initialized) {
         last_door_closed = door_closed;
         last_lock_open   = lock_open;
@@ -50,37 +65,45 @@ void autolock_poll(void) {
         return;
     }
 
-    /* ── обновление таймеров ──────────────────────────────────── */
+    /* ── timer updates ────────────────────────────────────────── */
+    /* A manual hold (button long-press) ignores all automatic rescheduling so
+     * its 2/5 min window survives the door being opened and closed. */
 
-    /* дверь открылась — сбросить всё */
-    if (!door_closed && last_door_closed) {
+    /* door opened — reset everything */
+    if (!door_closed && last_door_closed && !manual_hold) {
         cancel_autolock();
     }
 
-    /* дверь закрылась — закрыть замок через 10 сек */
-    if (door_closed && !last_door_closed) {
+    /* door closed — close the lock after 10 s */
+    if (door_closed && !last_door_closed && !manual_hold) {
         schedule_autolock(now, AUTOLOCK_AFTER_DOOR_CLOSE_MS);
     }
 
-    /* замок открылся при закрытой двери — закрыть через 30 сек */
-    if (lock_open && !last_lock_open && door_closed) {
+    /* lock opened while door closed — close after 30 s */
+    if (lock_open && !last_lock_open && door_closed && !manual_hold) {
         schedule_autolock(now, AUTOLOCK_AFTER_LOCK_OPEN_MS);
     }
 
     last_door_closed = door_closed;
     last_lock_open   = lock_open;
 
-    /* ── выполнение таймера ───────────────────────────────────── */
+    /* ── timer execution ──────────────────────────────────────── */
 
     if (autolock_at == 0) return;
 
-    /* предупреждение за 3 секунды */
+    /* nothing to close if the lock is already closed — cancel silently, no beep */
+    if (!lock_open) {
+        cancel_autolock();
+        return;
+    }
+
+    /* warn 3 seconds before closing */
     if (!warned && now >= autolock_at - AUTOLOCK_WARN_BEFORE_MS) {
         buzzer_warn();
         warned = true;
     }
 
-    /* время вышло — закрыть замок */
+    /* time is up — close the lock */
     if (now >= autolock_at) {
         cancel_autolock();
         close_lock(true);

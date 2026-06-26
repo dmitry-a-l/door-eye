@@ -4,6 +4,7 @@
 #include "lock.h"
 #include "light.h"
 #include "autolock.h"
+#include "button.h"
 #include "pico/stdlib.h"
 #include "pico/stdio_usb.h"
 
@@ -20,6 +21,7 @@ int main(void) {
     while (true) {
         poll_vpins();
         autolock_poll();
+        button_poll();
         light_leds();
         commands_poll();
     }
