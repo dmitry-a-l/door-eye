@@ -4,13 +4,19 @@ set -Eeuo pipefail
 
 MAC_UNDERSCORE="${BT_DEVICE_MAC//:/_}"
 
+# Plain connect attempts before falling back to an adapter power-cycle.
+BT_GENTLE_ATTEMPTS="${BT_GENTLE_ATTEMPTS:-3}"
+# Seconds to wait after a power-cycle for WirePlumber to re-register the A2DP
+# endpoint, so the next connect doesn't fail with "Protocol not available".
+BT_A2DP_SETTLE="${BT_A2DP_SETTLE:-5}"
+
 log() {
   echo "$*" >&2
 }
 
-# Готовность определяем по наличию A2DP-sink в PipeWire, а НЕ по флагу
-# Connected в BlueZ: после самозасыпания колонки BlueZ может держать
-# фантомный Connected=yes без живого транспорта.
+# Readiness is the presence of the A2DP sink in PipeWire, NOT BlueZ's Connected
+# flag: after the speaker auto-sleeps BlueZ may keep a phantom Connected=yes with
+# no live transport.
 sink_ready() {
   pw-cli ls Node 2>/dev/null | grep -q "bluez_output.${MAC_UNDERSCORE}"
 }
@@ -25,14 +31,33 @@ wait_sink() {
   return 1
 }
 
+# PipeWire node id of the speaker's A2DP sink (looked up by MAC-based name).
+sink_node_id() {
+  pw-cli ls Node 2>/dev/null | awk -v n="bluez_output.${MAC_UNDERSCORE}" '
+    /^[[:space:]]*id [0-9]+,/ { cur = $2; sub(",", "", cur) }
+    index($0, n)             { print cur; exit }'
+}
+
+# Pin the sink to BT_VOLUME. The speaker restores its own level (~0.40) on each
+# reconnect, so we re-apply after every connect. Needs software volume, i.e.
+# bluez5.enable-hw-volume = false (see 51-disable-hfp.conf).
+apply_volume() {
+  local id
+  id="$(sink_node_id)"
+  [[ -n "$id" ]] || return 1
+  if wpctl set-volume "$id" "$BT_VOLUME" 2>/dev/null; then
+    log "Volume set to $BT_VOLUME"
+  fi
+}
+
 connect_speaker() {
   timeout "$BT_CONNECT_TIMEOUT" \
     bluetoothctl connect "$BT_DEVICE_MAC" >/dev/null 2>&1
 }
 
-# Сброс фантомного линка: обычный disconnect на мёртвом линке висит,
-# поэтому передёргиваем питание контроллера — это гарантированно чистит
-# зависшее состояние, после чего connect поднимает транспорт заново.
+# Reset a phantom link: a plain disconnect on a dead link hangs, so we power-cycle
+# the controller — this reliably clears the stuck state. Heavy-handed (it drops
+# the A2DP endpoint too), so it is only used as a last resort.
 recover_link() {
   log "Recovering link via adapter power-cycle. Powering off"
   bluetoothctl power off
@@ -42,21 +67,48 @@ recover_link() {
   sleep 2
 }
 
+# Plain connect + wait for the sink, retried a few times. The speaker is usually
+# just waking from sleep, so this recovers without a power-cycle — and avoids the
+# "a2dp-sink Protocol not available" storm the power-cycle would trigger.
+try_connect() {
+  local attempts="${1}" i
+  for (( i = 1; i <= attempts; i++ )); do
+    connect_speaker
+    wait_sink "$BT_SINK_WAIT" && return 0
+    sleep "$BT_RETRY_INTERVAL"
+  done
+  return 1
+}
+
 reconnect() {
   log "Sink missing, reconnecting"
-  if connect_speaker; then
-    wait_sink 5 
+
+  # 1. Gentle: no power-cycle. Handles the common case (speaker woke up).
+  if try_connect "$BT_GENTLE_ATTEMPTS"; then
     log "Reconnected"
-  else
-    log "Still no sink — likely phantom, recovering"
-    recover_link
-    connect_speaker
-    wait_sink "$BT_SINK_WAIT"
-    log "Reconnected after recovery"
+    apply_volume
+    return 0
   fi
+
+  # 2. Last resort: power-cycle the adapter once, let WirePlumber re-register the
+  #    A2DP endpoint, then try again.
+  log "Gentle reconnect failed, power-cycling adapter"
+  recover_link
+  sleep "$BT_A2DP_SETTLE"
+  if try_connect "$BT_GENTLE_ATTEMPTS"; then
+    log "Reconnected after recovery"
+    apply_volume
+    return 0
+  fi
+
+  log "Reconnect failed"
+  return 1
 }
 
 log "Started autoconnect-bt-speaker for $BT_DEVICE_MAC"
+
+# apply the volume once if the speaker is already connected at startup
+sink_ready && apply_volume
 
 while true; do
   if sink_ready; then
